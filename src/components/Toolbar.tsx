@@ -337,7 +337,7 @@ export function Toolbar({
               </button>
             ))}
             <div className="flex items-center gap-2 border-t border-dashed border-ink/30 bg-paper3/70 px-3 py-1.5 text-[13px] text-ink2">
-              <EnginePicker engine={engine} onChange={onEngine} dropUp compact />
+              <EnginePicker engine={engine} onChange={onEngine} compact />
               <span className="ml-auto hidden sm:inline">↑↓ to move · !bang works</span>
             </div>
           </div>

@@ -104,7 +104,7 @@ export function EnginePicker({
           aria-label="Search engines"
           onKeyDown={onKey}
           className={[
-            "pop-in absolute z-[80] w-[272px] border-2 border-ink bg-paper2 text-ink ink-shadow-lg",
+            "pop-in no-scrollbar absolute z-[80] max-h-[min(420px,55vh)] w-[272px] overflow-y-auto border-2 border-ink bg-paper2 text-ink ink-shadow-lg",
             dropUp ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
             align === "right" ? "right-0" : "left-0",
           ].join(" ")}

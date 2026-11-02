@@ -20,11 +20,11 @@ const enc = (q: string) => encodeURIComponent(q);
  * Google links are forwarded to their own page like any other site.
  */
 export const ENGINES: SearchEngine[] = [
-  { id: "mwmbl", name: "Mwmbl", short: "Mw", note: "open, non-profit index · in-app", mode: "results", url: (q) => `https://mwmbl.org/?q=${enc(q)}` },
-  { id: "wiki", name: "Wikipedia", short: "W", note: "encyclopedia · in-app", mode: "results", url: (q) => `https://en.wikipedia.org/w/index.php?search=${enc(q)}` },
+  { id: "mwmbl", name: "Mwmbl", short: "Mw", note: "open, non-profit index", mode: "results", url: (q) => `https://mwmbl.org/?q=${enc(q)}` },
+  { id: "wiki", name: "Wikipedia", short: "W", note: "the encyclopedia", mode: "results", url: (q) => `https://en.wikipedia.org/w/index.php?search=${enc(q)}` },
   { id: "youtube", name: "YouTube", short: "▶", note: "videos play inside Quill", mode: "results", url: (q) => `https://www.youtube.com/results?search_query=${enc(q)}` },
   // GitHub can't be proxied or framed, so it gets its own in-app desk fed by the public API.
-  { id: "github", name: "GitHub", short: "Gh", note: "repos, READMEs & issues in-app", mode: "results", url: (q) => `https://github.com/search?q=${enc(q)}&type=repositories` },
+  { id: "github", name: "GitHub", short: "Gh", note: "repos, READMEs & issues", mode: "results", url: (q) => `https://github.com/search?q=${enc(q)}&type=repositories` },
   { id: "google", name: "Google", short: "G", note: "web results", mode: "site", url: (q) => `https://www.google.com/search?q=${enc(q)}` },
   { id: "ddg", name: "DuckDuckGo", short: "DDG", note: "private web results", mode: "site", url: (q) => `https://duckduckgo.com/?q=${enc(q)}` },
   { id: "bing", name: "Bing", short: "B", note: "Microsoft web results", mode: "site", url: (q) => `https://www.bing.com/search?q=${enc(q)}` },

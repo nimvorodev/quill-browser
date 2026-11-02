@@ -438,6 +438,8 @@ export default function App() {
       const title = pageTitleFor(url);
 
       if (paramBlocked.length) addBlocked(paramBlocked);
+      // History covers every navigation, not only the relay-fetched ones.
+      if (!hit) recordHistory(url, title, target.ghost);
       patch(target.id, (t) => ({
         ...t,
         url,
@@ -544,15 +546,16 @@ export default function App() {
     [tab, defaultNavMode, patch, loadReader, filtersFor, abortTabFetch],
   );
 
-  /** A click inside a webview/iframe navigated the page itself — the back/forward stack must grow with it. */
+  /** A click inside a webview/iframe navigated the page itself — the back/forward stack and history must grow with it. */
   const frameNav = useCallback(
-    (id: string, href: string) => {
-      patch(id, (t) => {
+    (target: Tab, href: string) => {
+      patch(target.id, (t) => {
         if (t.stack[t.idx] === href) return t.url === href ? t : { ...t, url: href };
         return { ...t, url: href, title: pageTitleFor(href), stack: [...t.stack.slice(0, t.idx + 1), href], idx: t.idx + 1 };
       });
+      recordHistory(href, pageTitleFor(href), target.ghost);
     },
-    [patch],
+    [patch, recordHistory],
   );
 
   const reload = useCallback(() => {
@@ -1009,7 +1012,7 @@ export default function App() {
         onReader={() => setTabView("reader")}
         onSplit={() => setTabView(tab.view === "split" ? "original" : "split")}
         onNavigate={(href, inNewTab) => (inNewTab ? openNew(href) : go(href))}
-        onFrameNavigate={(href) => frameNav(tab.id, href)}
+        onFrameNavigate={(href) => frameNav(tab, href)}
         onRetryHtml={() => loadReader(tab.id, tab.url, tab.title, tab.ghost, filtersFor(tab.allow, tab.deny), true)}
         onOpenShields={() => setDrawer("privacy")}
         dark={settings.darkOriginal}
@@ -1114,7 +1117,7 @@ export default function App() {
                   onMode={(m) => setDeskModes((d) => ({ ...d, [t.id]: m }))}
                   zoom={t.zoom}
                   nonce={t.nonce}
-                  onFrameNavigate={(href) => frameNav(t.id, href)}
+                  onFrameNavigate={(href) => frameNav(t, href)}
                   onTitle={(tt) => patch(t.id, (x) => ({ ...x, title: tt.slice(0, 70) }))}
                 />
               </div>
@@ -1172,7 +1175,7 @@ export default function App() {
               onMode={(m) => setDeskModes((d) => ({ ...d, [tab.id]: m }))}
               zoom={tab.zoom}
               nonce={tab.nonce}
-              onFrameNavigate={(href) => frameNav(tab.id, href)}
+              onFrameNavigate={(href) => frameNav(tab, href)}
               onTitle={(t) => patch(tab.id, (x) => ({ ...x, title: t.slice(0, 70) }))}
             />
           ) : tab.view === "reader" && parseSearchUrl(tab.url) ? (
