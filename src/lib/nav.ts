@@ -158,14 +158,15 @@ export function isPdfUrl(raw: string): boolean {
 }
 
 /**
- * Sites whose JS-heavy shell only works as the real live page — re-inking them
- * leaves their own loading spinner spinning forever.
- * ponytail: add hosts here as they're discovered; the general fix is out of scope.
+ * Sites whose JS-heavy shell only works as the real live page — shielded/interactive
+ * copies can't run their authenticated app, so the site appears broken.
+ * ponytail: curated as they're discovered; automatic fallback detection is out of scope.
  */
+const SPA_HOSTS = new Set(["reddit.com", "chatgpt.com"]);
 export function isSpaHost(raw: string): boolean {
   try {
     const h = new URL(raw).hostname.toLowerCase().replace(/^www\./, "");
-    return h === "reddit.com" || h.endsWith(".reddit.com");
+    return [...SPA_HOSTS].some((s) => h === s || h.endsWith("." + s));
   } catch {
     return false;
   }
