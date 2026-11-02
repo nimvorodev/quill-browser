@@ -236,14 +236,22 @@ export default function App() {
   }, []);
 
   // Desktop: real <title> of every webview page flows back from the main process.
-  // It upgrades tab titles and history entries whose title is still the generic hostname.
+  // Sites redirect (reddit.com -> www.reddit.com), so matching is by exact URL first,
+  // then by the newest same-host entry whose title is still the bare hostname.
   useEffect(() => {
     if (!desktop?.onFrameTitle) return;
     return desktop.onFrameTitle(({ url, title }) => {
       if (!title || !/^https?:\/\//i.test(url)) return;
-      const generic = (t: string) => !t || t === hostOf(url) || t === pageTitleFor(url);
-      setTabs((ts) => ts.map((t) => (t.url === url && generic(t.title) ? { ...t, title } : t)));
-      setHistory((h) => h.map((x) => (x.url === url && generic(x.title) ? { ...x, title } : x)));
+      const host = hostOf(url);
+      const generic = (t: string) => !t || t === host || t === pageTitleFor(url);
+      setTabs((ts) => ts.map((t) => (t.url === url || (hostOf(t.url) === host && generic(t.title)) ? { ...t, title } : t)));
+      setHistory((h) => {
+        const i = h.findIndex((x) => x.url === url || (hostOf(x.url) === host && generic(x.title)));
+        if (i < 0) return h;
+        const next = [...h];
+        next[i] = { ...h[i], title };
+        return next;
+      });
     });
   }, []);
 
@@ -1020,7 +1028,18 @@ export default function App() {
         autoplay={!settings.blockAutoplay}
         referrer={settings.noReferrer ? "no-referrer" : "strict-origin-when-cross-origin"}
         zoom={tab.zoom}
-        onTitle={(t) => patch(tab.id, (x) => ({ ...x, title: t.slice(0, 70) }))}
+        onTitle={(t) => {
+          // Real page title from the live frame: patch the tab AND its history entry
+          // (tab.url tracks the webview, redirects included, so the match is exact).
+          patch(tab.id, (x) => ({ ...x, title: t.slice(0, 70) }));
+          setHistory((h) => {
+            const i = h.findIndex((x) => x.url === tab.url);
+            if (i < 0) return h;
+            const next = [...h];
+            next[i] = { ...h[i], title: t.slice(0, 70) };
+            return next;
+          });
+        }}
         onReader={() => setTabView("reader")}
         onSplit={() => setTabView(tab.view === "split" ? "original" : "split")}
         onNavigate={(href, inNewTab) => (inNewTab ? openNew(href) : go(href))}

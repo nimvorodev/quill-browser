@@ -227,8 +227,11 @@ function createWindow() {
     // Real YouTube pages: strip ad placements from the player API's parsed JSON.
     wc.on("dom-ready", () => {
       try {
-        const host = new URL(wc.getURL()).hostname.toLowerCase();
-        if (/(^|\.)youtube\.com$/.test(host)) void wc.executeJavaScript(YT_NOADS, true).catch(() => {});
+        const url = wc.getURL();
+        // Backup title push: covers cases page-title-updated misses.
+        const t = wc.getTitle();
+        if (url && t) win?.webContents.send("quill:frame-title", { url, title: String(t).slice(0, 90) });
+        if (/(^|\.)youtube\.com$/.test(new URL(url).hostname.toLowerCase())) void wc.executeJavaScript(YT_NOADS, true).catch(() => {});
       } catch {
         /* not a page we care about */
       }
