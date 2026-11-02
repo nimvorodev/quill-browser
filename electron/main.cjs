@@ -18,6 +18,23 @@ const isDev = !app.isPackaged && !!process.env.VITE_DEV_SERVER_URL;
 const WEB_PARTITION = "persist:quill-web";
 const APP_PARTITION = "persist:quill-app";
 
+// Encrypted DNS (DoH). Chromium only accepts these as startup switches, so the
+// setting is persisted to disk and applied on the next launch.
+const DOH_TEMPLATE = "https://cloudflare-dns.com/dns-query";
+function dohEnabled() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "doh.json"), "utf8")).enabled === true;
+  } catch {
+    return false;
+  }
+}
+if (dohEnabled()) {
+  app.commandLine.appendSwitch("enable-features", "DnsOverHttps");
+  // automatic = upgrade to DoH when the resolver answers; fall back to system DNS otherwise.
+  app.commandLine.appendSwitch("dns-over-https-mode", "automatic");
+  app.commandLine.appendSwitch("dns-over-https-templates", DOH_TEMPLATE);
+}
+
 /** @type {BrowserWindow | null} */
 let win = null;
 /** @type {Set<string>} */
@@ -293,6 +310,15 @@ ipcMain.handle("quill:capture-page", async () => {
   if (!win) return "";
   const img = await win.webContents.capturePage();
   return img.isEmpty() ? "" : img.toDataURL();
+});
+ipcMain.handle("quill:set-doh", (_e, enabled) => {
+  try {
+    fs.mkdirSync(app.getPath("userData"), { recursive: true });
+    fs.writeFileSync(path.join(app.getPath("userData"), "doh.json"), JSON.stringify({ enabled: enabled === true }));
+    return true;
+  } catch {
+    return false;
+  }
 });
 ipcMain.handle("quill:show-item", (_e, p) => {
   // Only files the download handler itself chose may be revealed.

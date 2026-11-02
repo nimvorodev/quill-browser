@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "./Icons";
 import { CAT_LABEL, CAT_COLOR, RULE_COUNT, type Category } from "../lib/filters";
 import { TOGGLES, type Settings } from "../lib/settings";
+import { desktop } from "../lib/platform";
 import { hostOf } from "../lib/nav";
 import type { Tab } from "../lib/store";
 
@@ -176,7 +177,14 @@ export function PrivacyPanel({
                   </span>
                   <span className="block text-[13.5px] italic leading-snug text-ink3">{t.note}</span>
                 </span>
-                <Switch on={on} onClick={() => setSettings((s) => ({ ...s, [t.key]: !on }))} />
+                <Switch
+                  on={on}
+                  onClick={() => {
+                    setSettings((s) => ({ ...s, [t.key]: !on }));
+                    // Desktop: persist the DoH flag for the main process to apply on next launch.
+                    if (t.key === "doh") void desktop?.setDoh(!on);
+                  }}
+                />
               </div>
             );
           })}
@@ -208,10 +216,6 @@ export function PrivacyPanel({
             </button>
           ))}
         </div>
-        <p className="mt-2 text-[13.5px] italic text-ink3">
-          Everything Quill stores lives in this browser's localStorage under the <code>quill.v1.</code> prefix. There is no
-          account, no server, no analytics beacon — erasing is instant and permanent.
-        </p>
       </section>
     </div>
   );

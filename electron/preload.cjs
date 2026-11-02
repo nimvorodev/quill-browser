@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("quill", {
   capturePage: () => ipcRenderer.invoke("quill:capture-page"),
   showItem: (p) => ipcRenderer.invoke("quill:show-item", String(p || "")),
   onDownload: on("quill:download"),
+  setDoh: (v) => ipcRenderer.invoke("quill:set-doh", v === true),
 
   /** Menu accelerators & popups from web content arrive here. */
   onCommand: on("quill:cmd", (v) => String(v || "")),

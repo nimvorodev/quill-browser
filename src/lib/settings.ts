@@ -77,6 +77,6 @@ export const TOGGLES: ToggleDef[] = [
   { key: "saveHistory", label: "Write history", icon: "history", note: "Turn off and nothing gets written to disk.", real: true },
   { key: "ghostDefault", label: "Ghost by default", icon: "ghost", note: "Every new tab opens in ghost mode.", real: true },
   { key: "fingerprint", label: "Fingerprint noise", icon: "target", note: "Advisory: no canvas/font fingerprinting is done by Quill itself.", real: false },
-  { key: "doh", label: "Encrypted DNS", icon: "antenna", note: "Advisory: a web app can't reroute DNS — use browser/OS DoH for that.", real: false },
+  { key: "doh", label: "Encrypted DNS", icon: "antenna", note: "Route DNS lookups through Cloudflare's encrypted DoH · desktop app, restart to apply", real: true },
   { key: "ambient", label: "Ambient doodles", icon: "palette", note: "Floating ink sketches behind the chrome.", real: true },
 ];

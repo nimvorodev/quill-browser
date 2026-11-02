@@ -38,6 +38,8 @@ export interface DesktopBridge {
   capturePage(): Promise<string>;
   /** Reveal a downloaded file in the system file manager. */
   showItem(path: string): Promise<void>;
+  /** Turn encrypted DNS (Cloudflare DoH) on/off; applies after an app restart. */
+  setDoh(enabled: boolean): Promise<boolean>;
   /** Download progress from both the webviews and the renderer itself. */
   onDownload(cb: (item: DownloadItem) => void): () => void;
   /** Request desktop webview partition name (persisted, isolated from app). */
