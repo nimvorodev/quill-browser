@@ -235,6 +235,18 @@ export default function App() {
     });
   }, []);
 
+  // Desktop: real <title> of every webview page flows back from the main process.
+  // It upgrades tab titles and history entries whose title is still the generic hostname.
+  useEffect(() => {
+    if (!desktop?.onFrameTitle) return;
+    return desktop.onFrameTitle(({ url, title }) => {
+      if (!title || !/^https?:\/\//i.test(url)) return;
+      const generic = (t: string) => !t || t === hostOf(url) || t === pageTitleFor(url);
+      setTabs((ts) => ts.map((t) => (t.url === url && generic(t.title) ? { ...t, title } : t)));
+      setHistory((h) => h.map((x) => (x.url === url && generic(x.title) ? { ...x, title } : x)));
+    });
+  }, []);
+
   // Each tab owns its fetch. A slow page in one tab never cancels or freezes another.
   const abortsRef = useRef<Map<string, AbortController>>(new Map());
   const reqGenRef = useRef<Map<string, number>>(new Map());

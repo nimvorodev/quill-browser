@@ -83,10 +83,15 @@ export function HistoryPanel({
           <p className="mb-1 text-[13px] uppercase tracking-[0.18em] text-ink3">{day}</p>
           <div className="ruled border-l-2 border-ink/20 pl-2">
             {items.map((h) => (
-              <div key={h.at + h.url} className="group flex items-baseline gap-2 py-[5px] leading-[28px]">
+              <div key={h.at + h.url} className="group flex items-start gap-2 py-[5px] leading-[22px]">
                 {h.ghost && <Icon name="ghost" size={13} className="mt-[6px] shrink-0 text-violet" />}
-                <button onClick={() => onOpen(h.url)} className="min-w-0 flex-1 truncate text-left text-[16.5px] hover:underline decoration-wavy decoration-pink underline-offset-4">
-                  {h.title || prettyUrl(h.url)}
+                <button
+                  onClick={() => onOpen(h.url)}
+                  className="min-w-0 flex-1 text-left hover:underline decoration-wavy decoration-pink underline-offset-4"
+                >
+                  <span className="block truncate text-[16.5px]">{h.title || prettyUrl(h.url)}</span>
+                  {/* the full address under the title makes entries findable at a glance */}
+                  {h.title && <span className="block truncate text-[12.5px] text-ink3">{prettyUrl(h.url)}</span>}
                 </button>
                 <span className="shrink-0 text-[13px] tabular-nums text-ink3">
                   {new Date(h.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

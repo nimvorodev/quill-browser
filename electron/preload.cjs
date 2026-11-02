@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("quill", {
   showItem: (p) => ipcRenderer.invoke("quill:show-item", String(p || "")),
   onDownload: on("quill:download"),
   setDoh: (v) => ipcRenderer.invoke("quill:set-doh", v === true),
+  onFrameTitle: on("quill:frame-title"),
 
   /** Menu accelerators & popups from web content arrive here. */
   onCommand: on("quill:cmd", (v) => String(v || "")),

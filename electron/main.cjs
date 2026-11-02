@@ -215,6 +215,15 @@ function createWindow() {
     wc.on("will-navigate", (e, url) => {
       if (!/^https?:\/\//i.test(url)) e.preventDefault();
     });
+    // Real page titles flow back so tabs and history show them, not just hostnames.
+    wc.on("page-title-updated", (_e, title) => {
+      try {
+        const url = wc.getURL();
+        if (url && title) win?.webContents.send("quill:frame-title", { url, title: String(title).slice(0, 90) });
+      } catch {
+        /* window already gone */
+      }
+    });
     // Real YouTube pages: strip ad placements from the player API's parsed JSON.
     wc.on("dom-ready", () => {
       try {

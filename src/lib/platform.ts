@@ -40,6 +40,8 @@ export interface DesktopBridge {
   showItem(path: string): Promise<void>;
   /** Turn encrypted DNS (Cloudflare DoH) on/off; applies after an app restart. */
   setDoh(enabled: boolean): Promise<boolean>;
+  /** Real <title> of a webview page, delivered as it loads and changes. */
+  onFrameTitle(cb: (info: { url: string; title: string }) => void): () => void;
   /** Download progress from both the webviews and the renderer itself. */
   onDownload(cb: (item: DownloadItem) => void): () => void;
   /** Request desktop webview partition name (persisted, isolated from app). */
