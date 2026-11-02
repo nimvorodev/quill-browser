@@ -1,0 +1,592 @@
+@import "tailwindcss";
+
+/* ============ design tokens ============ */
+:root {
+  --paper: #f7f4ea;
+  --paper-2: #fffdf6;
+  --paper-3: #efe9d8;
+  --ink: #1a2440;
+  --ink-2: #5b6480;
+  --ink-3: #9aa0b4;
+  --rule: #cfe0ef;
+  --margin: #f2b8c6;
+  --yellow: #ffd23f;
+  --pink: #ff5d8f;
+  --cyan: #23c3d6;
+  --lime: #8ed44b;
+  --orange: #ff8a3d;
+  --violet: #8b6cf0;
+  --red: #e5484d;
+  --green: #2fa36b;
+  --shadow: 0 2px 0 rgba(26, 36, 64, 0.9);
+  --grain: 0.045;
+}
+
+[data-theme="night"] {
+  --paper: #12171f;
+  --paper-2: #1a212c;
+  --paper-3: #0d1219;
+  --ink: #eef1f8;
+  --ink-2: #a3adbf;
+  --ink-3: #6d7789;
+  --rule: #26303f;
+  --margin: #6a3b4b;
+  --yellow: #ffcf3f;
+  --pink: #ff6f9c;
+  --cyan: #37d2e4;
+  --lime: #9ade5c;
+  --orange: #ff9a52;
+  --violet: #a48bff;
+  --red: #ff6369;
+  --green: #45c98a;
+  --shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+  --grain: 0.06;
+}
+
+@theme inline {
+  --font-display: "Caveat", "Patrick Hand", cursive;
+  --font-hand: "Patrick Hand", "Gaegu", cursive;
+  --font-read: "Shantell Sans", "Patrick Hand", cursive;
+  --color-paper: var(--paper);
+  --color-paper2: var(--paper-2);
+  --color-paper3: var(--paper-3);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-ink3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-yellow: var(--yellow);
+  --color-pink: var(--pink);
+  --color-cyan: var(--cyan);
+  --color-lime: var(--lime);
+  --color-orange: var(--orange);
+  --color-violet: var(--violet);
+  --color-red: var(--red);
+  --color-green: var(--green);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  color-scheme: light;
+}
+[data-theme="night"] {
+  color-scheme: dark;
+}
+
+/* Native dropdowns ignore our paper background and keep a white menu.
+   Force ink-on-paper so night mode isn't light text on a white list. */
+select,
+select option,
+select optgroup {
+  background-color: var(--paper-2);
+  color: var(--ink);
+}
+
+/* Yellow paper needs dark ink in both themes — inherited --ink is near-white at night. */
+.bg-yellow,
+.hover\:bg-yellow:hover {
+  color: #1a2440;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-hand);
+  color: var(--ink);
+  background: var(--paper);
+  overflow: hidden;
+  letter-spacing: 0.01em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--yellow) 70%, transparent);
+  color: var(--ink);
+}
+
+/* ============ paper surfaces ============ */
+.paper-bg {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--yellow) 14%, transparent), transparent 42%),
+    radial-gradient(circle at 88% 92%, color-mix(in srgb, var(--cyan) 12%, transparent), transparent 45%),
+    radial-gradient(circle at 78% 6%, color-mix(in srgb, var(--pink) 9%, transparent), transparent 38%);
+}
+
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--grain);
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-theme="night"] .grain::after {
+  mix-blend-mode: screen;
+}
+
+.ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 27px,
+    color-mix(in srgb, var(--rule) 60%, transparent) 28px
+  );
+}
+.grid-paper {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--rule) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--rule) 45%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ============ hand-drawn edges ============ */
+.hd {
+  border: 2px solid var(--ink);
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+.hd-b {
+  border: 2px solid var(--ink);
+  border-radius: 12px 225px 18px 255px / 255px 18px 225px 12px;
+}
+.hd-soft {
+  border: 1.5px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  border-radius: 180px 12px 200px 14px / 12px 200px 14px 180px;
+}
+.hd-underline {
+  position: relative;
+}
+.hd-underline::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -6px;
+  height: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 10' preserveAspectRatio='none'%3E%3Cpath d='M2 6 C 40 2, 70 9, 110 5 S 170 2, 198 6' fill='none' stroke='%231a2440' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat center / 100% 100%;
+  opacity: 0.8;
+}
+[data-theme="night"] .hd-underline::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 10' preserveAspectRatio='none'%3E%3Cpath d='M2 6 C 40 2, 70 9, 110 5 S 170 2, 198 6' fill='none' stroke='%23eef1f8' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.ink-shadow {
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.ink-shadow-sm {
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.ink-shadow-lg {
+  box-shadow: 6px 7px 0 color-mix(in srgb, var(--ink) 85%, transparent);
+}
+
+.btn-sketch {
+  transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.14s ease, background 0.2s ease;
+}
+.btn-sketch:hover {
+  transform: translate(-1px, -1px) rotate(-0.6deg);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.btn-sketch:active {
+  transform: translate(2px, 2px) rotate(0.4deg);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+/* ============ marker highlight ============ */
+.marker {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 8%,
+    color-mix(in srgb, var(--hl, var(--yellow)) 72%, transparent) 12%,
+    color-mix(in srgb, var(--hl, var(--yellow)) 72%, transparent) 88%,
+    transparent 92%
+  );
+  background-size: 0% 100%;
+  background-repeat: no-repeat;
+  animation: sweep 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  padding: 0 0.15em;
+}
+@keyframes sweep {
+  to {
+    background-size: 100% 100%;
+  }
+}
+
+.tape {
+  position: absolute;
+  width: 92px;
+  height: 26px;
+  background: color-mix(in srgb, var(--yellow) 55%, white);
+  border-left: 1px dashed rgba(0, 0, 0, 0.12);
+  border-right: 1px dashed rgba(0, 0, 0, 0.12);
+  opacity: 0.85;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* ============ motion ============ */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) rotate(-2deg) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg) translateY(0);
+  }
+}
+.pop-in {
+  animation: pop-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 0deg));
+  }
+  50% {
+    transform: translate3d(0, -14px, 0) rotate(calc(var(--r, 0deg) + 4deg));
+  }
+}
+.drift {
+  animation: drift var(--d, 9s) ease-in-out infinite;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.draw {
+  stroke-dasharray: var(--len, 400);
+  stroke-dashoffset: var(--len, 400);
+  animation: draw 1.5s ease-out forwards;
+}
+
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(-2.5deg);
+  }
+  50% {
+    transform: rotate(2.5deg);
+  }
+}
+.wiggle {
+  animation: wiggle 2.4s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.pen-caret::after {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.18em;
+  background: var(--pink);
+  transform: skewX(-12deg);
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-1px) rotate(-0.5deg);
+  }
+  30%,
+  70% {
+    transform: translateX(2px) rotate(0.6deg);
+  }
+  50% {
+    transform: translateX(-2px);
+  }
+}
+.shake {
+  animation: shake 0.4s ease;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.slide-left {
+  animation: slide-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-32px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.drawer-in {
+  animation: slide-in-left 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fade-in {
+  animation: fade-in 0.2s ease both;
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin-slow {
+  animation: spin-slow 1.1s linear infinite;
+}
+
+@keyframes tab-sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(330%);
+  }
+}
+.tab-sweep {
+  animation: tab-sweep 1.15s ease-in-out infinite;
+}
+
+/* ============ bits ============ */
+input,
+textarea,
+button,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+input:focus,
+textarea:focus,
+select:focus,
+button:focus {
+  outline: none;
+}
+textarea {
+  resize: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.no-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 99px;
+}
+.no-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tilt-l {
+  transform: rotate(-0.7deg);
+}
+.tilt-r {
+  transform: rotate(0.7deg);
+}
+
+.tab-shape {
+  border-radius: 14px 16px 0 0;
+  border: 2px solid var(--ink);
+  border-bottom: none;
+  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
+}
+
+.sticky-shadow {
+  box-shadow: 2px 6px 12px rgba(26, 36, 64, 0.18);
+}
+
+.reading {
+  font-family: var(--font-read);
+  font-size: 17px;
+  line-height: 1.85;
+}
+
+/* ============ GitHub README, rendered from GitHub's own sanitised HTML ============ */
+.quill-md {
+  overflow-wrap: anywhere;
+}
+.quill-md :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 1.1em 0 0.4em;
+  line-height: 1.15;
+}
+.quill-md :where(h1) { font-size: 1.7em; }
+.quill-md :where(h2) { font-size: 1.42em; border-bottom: 2px dashed color-mix(in srgb, var(--ink) 25%, transparent); padding-bottom: 0.2em; }
+.quill-md :where(h3) { font-size: 1.22em; }
+.quill-md :where(h4, h5, h6) { font-size: 1.05em; }
+.quill-md p { margin: 0.6em 0; }
+.quill-md a { color: var(--cyan); text-decoration: underline; text-decoration-style: wavy; text-underline-offset: 3px; overflow-wrap: anywhere; }
+/* GitHub wraps some images in <themed-picture><picture>, which are inline by default.
+   An inline wrapper around a block image makes the image stretch to the container width,
+   so force the wrappers to block and let images keep their natural size. */
+.quill-md :where(picture, themed-picture, figure) {
+  display: block;
+  max-width: 100%;
+}
+.quill-md img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 440px;
+  object-fit: contain;
+  border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  background: #fff;
+}
+.quill-md p[align="center"] {
+  text-align: center;
+}
+.quill-md :where(video, canvas, svg) {
+  max-width: 100%;
+  height: auto;
+}
+.quill-md :where(ul, ol) { margin: 0.6em 0; padding-left: 1.5em; }
+.quill-md li { margin: 0.25em 0; }
+.quill-md :where(ul > li) { list-style: none; position: relative; }
+.quill-md :where(ul > li)::before {
+  content: "";
+  position: absolute;
+  left: -0.95em;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  background: var(--pink);
+  transform: rotate(45deg);
+}
+.quill-md blockquote {
+  margin: 0.7em 0;
+  padding: 0.2em 0.9em;
+  border-left: 3px solid var(--yellow);
+  background: color-mix(in srgb, var(--paper-3) 45%, transparent);
+  color: var(--ink-2);
+}
+.quill-md :not(pre) > code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
+  background: color-mix(in srgb, var(--paper-3) 60%, transparent);
+}
+.quill-md pre {
+  margin: 0.7em 0;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+  border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  background: color-mix(in srgb, var(--paper-3) 55%, transparent);
+  border-radius: 10px 3px 12px 3px;
+}
+.quill-md pre code { font-family: ui-monospace, monospace; font-size: 0.88em; background: none; border: 0; }
+.quill-md table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.8em 0;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+.quill-md :where(th, td) { border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent); padding: 0.35em 0.7em; }
+.quill-md th { background: color-mix(in srgb, var(--yellow) 32%, transparent); font-weight: 700; }
+.quill-md hr { border: 0; border-top: 2px dashed color-mix(in srgb, var(--ink) 30%, transparent); margin: 1.4em 0; }
+.quill-md details { margin: 0.5em 0; }
+.quill-md summary { cursor: pointer; font-weight: 700; }
+
+/* ============ desktop shell ============ */
+/* Frameless window: empty chrome drags the window, controls opt back out. */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag,
+.drag-region button,
+.drag-region [role="tab"],
+.drag-region input {
+  -webkit-app-region: no-drag;
+}
+
+/* The desktop webview fills its pane exactly like an iframe would. */
+webview {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.reading-serif {
+  font-family: "Charter", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  line-height: 1.82;
+}
+
+.reading-mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  line-height: 1.75;
+}
+
+.paper-sepia {
+  background-color: #f3e9d2 !important;
+  color: #2b2116 !important;
+}
+[data-theme="night"] .paper-sepia {
+  background-color: #211c15 !important;
+  color: #ede1c9 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
