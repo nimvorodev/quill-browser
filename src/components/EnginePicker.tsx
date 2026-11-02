@@ -112,8 +112,8 @@ export function EnginePicker({
         >
           {ENGINES.map((e, i) => {
             const on = e.id === engine.id;
-            const groupHead =
-              i === 0 ? "reads here" : ENGINES[i - 1].mode !== e.mode && e.mode === "site" ? "opens its own site" : null;
+            const section = e.mode === "results" ? "reads here" : "opens its own site";
+            const groupHead = i === 0 || ENGINES[i - 1].mode !== e.mode ? section : null;
             return (
               <div key={e.id}>
                 {groupHead && (

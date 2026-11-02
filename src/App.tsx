@@ -188,6 +188,13 @@ export default function App() {
       setSettings((s) => (s.defaultView === "reader" ? { ...s, defaultView: "original" } : s));
     }
   }, []);
+  // One-time: Google is the default engine now; older saves kept "ddg". Re-picking another engine sticks.
+  useEffect(() => {
+    if (localStorage.getItem(PREFIX + "enginefix") === null) {
+      localStorage.setItem(PREFIX + "enginefix", "1");
+      setSettings((s) => (s.engine === "ddg" ? { ...s, engine: "google" } : s));
+    }
+  }, []);
   const [stats, setStats] = useLocal<{ total: number; byCat: Record<string, number>; since: number }>("stats", {
     total: 0,
     byCat: {},

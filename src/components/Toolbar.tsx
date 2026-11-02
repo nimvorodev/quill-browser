@@ -213,6 +213,8 @@ export function Toolbar({
             }}
             onBlur={() =>
               setTimeout(() => {
+                // Focus moved into the dropdown itself (e.g. the engine picker) — keep it open.
+                if (wrapRef.current?.contains(document.activeElement)) return;
                 setFocused(false);
                 setOpen(false);
                 setInput(tab.url === HOME ? "" : tab.url);

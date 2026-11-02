@@ -31,7 +31,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  engine: "ddg",
+  engine: "google",
   shields: true,
   blockSocial: true,
   blockMiners: true,

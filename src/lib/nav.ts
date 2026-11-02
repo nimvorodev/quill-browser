@@ -20,18 +20,18 @@ const enc = (q: string) => encodeURIComponent(q);
  * Google links are forwarded to their own page like any other site.
  */
 export const ENGINES: SearchEngine[] = [
-  { id: "ddg", name: "DuckDuckGo", short: "DDG", note: "the real DuckDuckGo page, shielded", mode: "site", url: (q) => `https://duckduckgo.com/?q=${enc(q)}` },
-  { id: "google", name: "Google", short: "G", note: "the real Google page, shielded", mode: "site", url: (q) => `https://www.google.com/search?q=${enc(q)}` },
   { id: "mwmbl", name: "Mwmbl", short: "Mw", note: "open, non-profit index · in-app", mode: "results", url: (q) => `https://mwmbl.org/?q=${enc(q)}` },
-  { id: "wiki", name: "Wikipedia", short: "W", note: "encyclopedia · fetched directly", mode: "results", url: (q) => `https://en.wikipedia.org/w/index.php?search=${enc(q)}` },
+  { id: "wiki", name: "Wikipedia", short: "W", note: "encyclopedia · in-app", mode: "results", url: (q) => `https://en.wikipedia.org/w/index.php?search=${enc(q)}` },
   { id: "youtube", name: "YouTube", short: "▶", note: "videos play inside Quill", mode: "results", url: (q) => `https://www.youtube.com/results?search_query=${enc(q)}` },
   // GitHub can't be proxied or framed, so it gets its own in-app desk fed by the public API.
-  { id: "github", name: "GitHub", short: "Gh", note: "repos, READMEs & issues in Quill", mode: "results", url: (q) => `https://github.com/search?q=${enc(q)}&type=repositories` },
-  { id: "bing", name: "Bing", short: "B", note: "the real Bing page, shielded", mode: "site", url: (q) => `https://www.bing.com/search?q=${enc(q)}` },
-  { id: "brave", name: "Brave Search", short: "Br", note: "the real Brave page, shielded", mode: "site", url: (q) => `https://search.brave.com/search?q=${enc(q)}` },
-  { id: "startpage", name: "Startpage", short: "SP", note: "Google results · real page", mode: "site", url: (q) => `https://www.startpage.com/sp/search?query=${enc(q)}` },
-  { id: "mojeek", name: "Mojeek", short: "Mj", note: "own crawler · real page", mode: "site", url: (q) => `https://www.mojeek.com/search?q=${enc(q)}` },
-  { id: "ecosia", name: "Ecosia", short: "Eco", note: "plants trees · real page", mode: "site", url: (q) => `https://www.ecosia.org/search?q=${enc(q)}` },
+  { id: "github", name: "GitHub", short: "Gh", note: "repos, READMEs & issues in-app", mode: "results", url: (q) => `https://github.com/search?q=${enc(q)}&type=repositories` },
+  { id: "google", name: "Google", short: "G", note: "web results", mode: "site", url: (q) => `https://www.google.com/search?q=${enc(q)}` },
+  { id: "ddg", name: "DuckDuckGo", short: "DDG", note: "private web results", mode: "site", url: (q) => `https://duckduckgo.com/?q=${enc(q)}` },
+  { id: "bing", name: "Bing", short: "B", note: "Microsoft web results", mode: "site", url: (q) => `https://www.bing.com/search?q=${enc(q)}` },
+  { id: "brave", name: "Brave Search", short: "Br", note: "independent index", mode: "site", url: (q) => `https://search.brave.com/search?q=${enc(q)}` },
+  { id: "startpage", name: "Startpage", short: "SP", note: "Google results, privately", mode: "site", url: (q) => `https://www.startpage.com/sp/search?query=${enc(q)}` },
+  { id: "mojeek", name: "Mojeek", short: "Mj", note: "own crawler & index", mode: "site", url: (q) => `https://www.mojeek.com/search?q=${enc(q)}` },
+  { id: "ecosia", name: "Ecosia", short: "Eco", note: "plants trees", mode: "site", url: (q) => `https://www.ecosia.org/search?q=${enc(q)}` },
 ];
 
 export function engineById(id?: string | null): SearchEngine | undefined {
