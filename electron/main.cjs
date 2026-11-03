@@ -61,84 +61,14 @@ const YT_AD = /googlevideo\.com\/videoplayback\?[\s\S]*(?:[?&])(adformat|ad_type
 // content, so those stay in the reader pipeline (src/lib/filters.ts) only.
 const AD_PATHS = [/\/pagead\//i, /\/ptracking/i, /\/(vast\.xml|vpaid)/i, /\/show_ads\.js/i, /\/pubads\.impl/i];
 
-// AdGuard-style scriptlet: strip the player API's ad placements inside the real
-// YouTube page. URL rules alone can't stop SSAP ads.
-// The player/next data arrives via fetch().json() — that never goes through
-// JSON.parse, so both are patched: JSON.parse for script-embedded payloads,
-// window.fetch for the API responses that actually decide ads.
-// ponytail: ceiling = ads embedded in ytInitialData page vars; upgrade path is a
-// document_start content-script injection.
-const YT_NOADS = `(function () {
-  if (window.__quillNoAds) return;
-  window.__quillNoAds = 1;
-  var strip = function (x) {
-    if (!x || typeof x !== "object") return;
-    delete x.adPlacements;
-    delete x.playerAds;
-    delete x.adScreenLayouts;
-    if (Array.isArray(x.adSlots)) x.adSlots = [];
-  };
-  var scrub = function (o) {
-    try {
-      strip(o);
-      strip(o.playerResponse);
-      strip(o.response);
-      strip(o.playerConfig && o.playerConfig.webPlayerConfig);
-    } catch (e) {}
-    return o;
-  };
-  var parse = JSON.parse.bind(JSON);
-  JSON.parse = function (t, r) { return scrub(parse(t, r)); };
-  var of = window.fetch;
-  if (of) {
-    window.fetch = function (input, init) {
-      var url = typeof input === "string" ? input : (input && input.url) || "";
-      var p = of.apply(this, arguments);
-      // player/next only — browse responses are megabytes of feed data with
-      // no player ads in them, and rewriting them slows the whole site down.
-      if (!/youtubei\\/v1\\/(player|next)/.test(url)) return p;
-      return p.then(function (res) {
-        try {
-          if (res.bodyUsed) return res;
-          var ct = (res.headers && res.headers.get("content-type")) || "";
-          if (ct.indexOf("json") < 0) return res;
-          return res.clone().text().then(function (txt) {
-            // Cheap scan first: most responses carry no ads at all — rebuilding
-            // those (parse + re-serialize) is pure overhead on every page load.
-            if (txt.indexOf("adPlacements") < 0 && txt.indexOf("adSlots") < 0 && txt.indexOf("playerAds") < 0 && txt.indexOf("adScreenLayouts") < 0) return res;
-            try {
-              // Fresh response without the wire headers: content-encoding and
-              // content-length describe the OLD body, not this rebuilt one.
-              return new Response(JSON.stringify(scrub(JSON.parse(txt))), { status: res.status, statusText: res.statusText });
-            } catch (e) {
-              return res;
-            }
-          });
-        } catch (e) {
-          return res;
-        }
-      });
-    };
-  }
-})();`;
-
-// Chromium's own popup-blocker rule, ported into a scriptlet: window.open is
-// only honoured while a real user gesture is active. Ad popunders fire on
-// timers/scroll/page-load/synthetic clicks — no activation — so they die in
-// the page instead of becoming tabs. The main-process ad-host filter stays as
-// the second layer for gesture popups on known ad domains.
-const POPUP_GATE = `(function () {
-  if (window.__quillPopupGate) return;
-  window.__quillPopupGate = 1;
-  var oo = window.open;
-  if (!oo) return;
-  try {
-    window.open = function (url, name, feat) {
-      if (!(navigator.userActivation && navigator.userActivation.isActive)) return null;
-      return oo.call(window, url, name, feat);
-    };
-  } catch (e) {}
-})();`;
+// Page-world scriptlets (popup gate + YouTube ad scrub incl. display-ad hiding)
+// live in electron/scriptlets.cjs, injected via the DevTools protocol's
+// Page.addScriptToEvaluateOnNewDocument — DOCUMENT-START in the page's MAIN
+// world, before YouTube's inline player fetch (what Puppeteer's addInitScript
+// uses). A webview preload CANNOT do this: sandboxed preloads run in an
+// isolated world and can never patch the page's JSON.parse/fetch — verified
+// empirically on Electron 45.
+const SCRIPTLETS = fs.readFileSync(path.join(__dirname, "scriptlets.cjs"), "utf8");
 
 /* ---------------- downloads ---------------- */
 
@@ -265,6 +195,17 @@ function createWindow() {
     if (!/^https?:\/\//i.test(params.src || "")) params.src = "about:blank";
   });
   win.webContents.on("did-attach-webview", (_e, wc) => {
+    // Document-start scriptlet injection into the page's MAIN world (see the
+    // SCRIPTLETS note above). The debugger session stays attached for the
+    // webview's lifetime so every new document gets the script.
+    try {
+      wc.debugger.attach("1.3");
+      void wc.debugger.sendCommand("Page.enable").then(() =>
+        wc.debugger.sendCommand("Page.addScriptToEvaluateOnNewDocument", { source: SCRIPTLETS })
+      ).catch(() => { /* injection failed — network rules still hold */ });
+    } catch {
+      /* already debugging this webview (devtools open) — skip */
+    }
     wc.setWindowOpenHandler(({ url }) => {
       // The popup blocker for webviews: pop-ups from web content become a new
       // Quill tab — unless the URL is an ad, in which case it dies here
@@ -303,28 +244,14 @@ function createWindow() {
         /* window already gone */
       }
     });
-    const isYouTubePage = (u) => {
-      try {
-        return /(^|\.)youtube\.com$/.test(new URL(u).hostname.toLowerCase());
-      } catch {
-        return false;
-      }
-    };
-    // The scriptlets are idempotent (window flags): did-navigate injects them
-    // before page scripts run, dom-ready catches the first load.
-    const runScriptlets = (u) => {
-      void wc.executeJavaScript(POPUP_GATE, true).catch(() => {});
-      if (isYouTubePage(u)) void wc.executeJavaScript(YT_NOADS, true).catch(() => {});
-    };
-    wc.on("did-navigate", (_ev, url) => runScriptlets(url));
-    // Real YouTube pages: strip ad placements from the player API's parsed JSON.
+    // The scriptlets run from the preload at document-start (see the top of
+    // this file) — nothing to inject from here anymore.
     wc.on("dom-ready", () => {
       try {
         const url = wc.getURL();
         // Backup title push: covers cases page-title-updated misses.
         const t = wc.getTitle();
         if (url && t) win?.webContents.send("quill:frame-title", { url, title: String(t).slice(0, 90) });
-        runScriptlets(url);
       } catch {
         /* not a page we care about */
       }

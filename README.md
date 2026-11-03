@@ -12,6 +12,11 @@ YouTube and GitHub, and an offline-first AI side panel.
   social widgets stripped at the network layer from a filter list of hosts.
   Tap **re-ink** for a clean, notebook-styled reader copy, or split the two
   side by side.
+- **Webview scriptlets at document-start** — the popup gate and YouTube
+  ad scrub (incl. display-ad hiding) are injected into the page's main world
+  via the DevTools protocol before the site's own scripts run. The injected
+  code is pure JS holding zero authority; every real rule (network blocking,
+  popup filtering) is enforced in the main process.
 - **Search your way** — DuckDuckGo, Google, Bing, Brave, Startpage, Mojeek
   and Ecosia open their real results pages inside Quill, shielded. Wikipedia
   and Mwmbl render in-app from their public APIs. Bang shortcuts work
