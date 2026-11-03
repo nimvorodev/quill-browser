@@ -56,23 +56,30 @@ function hostBlocked(hostname) {
 // YouTube page. uBlock-grade blocking needs per-URL regex rules over googlevideo params.
 const YT_AD = /googlevideo\.com\/videoplayback\?[\s\S]*(?:[?&])(adformat|ad_type|adidx|ctier|oad)=|youtube\.com\/(?:api\/stats\/ads|pagead\/)/i;
 
-// AdGuard-style scriptlet: patch JSON.parse inside the real YouTube page so the player
-// API's ad placements never survive parsing. URL rules alone can't stop SSAP ads.
-// ponytail: ceiling = YouTube moving ad metadata elsewhere; upgrade path is a full adblock engine.
+// ponytail: path-level rules for the LIVE network layer — deliberately a short,
+// ad-specific list. Generic patterns ("/ads/", "prebid") false-positive on real
+// content, so those stay in the reader pipeline (src/lib/filters.ts) only.
+const AD_PATHS = [/\/pagead\//i, /\/ptracking/i, /\/(vast\.xml|vpaid)/i, /\/show_ads\.js/i, /\/pubads\.impl/i];
+
+// AdGuard-style scriptlet: strip the player API's ad placements inside the real
+// YouTube page. URL rules alone can't stop SSAP ads.
+// The player/next data arrives via fetch().json() — that never goes through
+// JSON.parse, so both are patched: JSON.parse for script-embedded payloads,
+// window.fetch for the API responses that actually decide ads.
+// ponytail: ceiling = ads embedded in ytInitialData page vars; upgrade path is a
+// document_start content-script injection.
 const YT_NOADS = `(function () {
   if (window.__quillNoAds) return;
   window.__quillNoAds = 1;
-  var parse = JSON.parse.bind(JSON);
-  JSON.parse = function (t, r) {
-    var o = parse(t, r);
+  var strip = function (x) {
+    if (!x || typeof x !== "object") return;
+    delete x.adPlacements;
+    delete x.playerAds;
+    delete x.adScreenLayouts;
+    if (Array.isArray(x.adSlots)) x.adSlots = [];
+  };
+  var scrub = function (o) {
     try {
-      var strip = function (x) {
-        if (!x || typeof x !== "object") return;
-        delete x.adPlacements;
-        delete x.playerAds;
-        delete x.adScreenLayouts;
-        if (Array.isArray(x.adSlots)) x.adSlots = [];
-      };
       strip(o);
       strip(o.playerResponse);
       strip(o.response);
@@ -80,6 +87,32 @@ const YT_NOADS = `(function () {
     } catch (e) {}
     return o;
   };
+  var parse = JSON.parse.bind(JSON);
+  JSON.parse = function (t, r) { return scrub(parse(t, r)); };
+  var of = window.fetch;
+  if (of) {
+    window.fetch = function (input, init) {
+      var url = typeof input === "string" ? input : (input && input.url) || "";
+      var p = of.apply(this, arguments);
+      if (!/youtubei\\/v1\\/(player|next|browse)/.test(url)) return p;
+      return p.then(function (res) {
+        try {
+          if (res.bodyUsed) return res;
+          var ct = (res.headers && res.headers.get("content-type")) || "";
+          if (ct.indexOf("json") < 0) return res;
+          return res.clone().text().then(function (txt) {
+            try {
+              return new Response(JSON.stringify(scrub(JSON.parse(txt))), { headers: res.headers, status: res.status, statusText: res.statusText });
+            } catch (e) {
+              return res;
+            }
+          });
+        } catch (e) {
+          return res;
+        }
+      });
+    };
+  }
 })();`;
 
 /* ---------------- downloads ---------------- */
@@ -120,7 +153,7 @@ function installNetworkFilter() {
       /* ignore */
     }
     // Never block the top-level document the user asked for — only subresources.
-    if (details.resourceType !== "mainFrame" && (hostBlocked(host) || (blockEnabled && YT_AD.test(details.url)))) {
+    if (details.resourceType !== "mainFrame" && (hostBlocked(host) || (blockEnabled && (YT_AD.test(details.url) || AD_PATHS.some((re) => re.test(details.url)))))) {
       blockedCount += 1;
       win?.webContents.send("quill:blocked", { url: details.url, host });
       return cb({ cancel: true });
@@ -224,6 +257,19 @@ function createWindow() {
         /* window already gone */
       }
     });
+    const isYouTubePage = (u) => {
+      try {
+        return /(^|\.)youtube\.com$/.test(new URL(u).hostname.toLowerCase());
+      } catch {
+        return false;
+      }
+    };
+    // The scriptlet is idempotent (window.__quillNoAds): did-navigate injects it
+    // before page scripts fetch the player data, dom-ready catches the first load.
+    const noAds = (u) => {
+      if (isYouTubePage(u)) void wc.executeJavaScript(YT_NOADS, true).catch(() => {});
+    };
+    wc.on("did-navigate", (_ev, url) => noAds(url));
     // Real YouTube pages: strip ad placements from the player API's parsed JSON.
     wc.on("dom-ready", () => {
       try {
@@ -231,7 +277,7 @@ function createWindow() {
         // Backup title push: covers cases page-title-updated misses.
         const t = wc.getTitle();
         if (url && t) win?.webContents.send("quill:frame-title", { url, title: String(t).slice(0, 90) });
-        if (/(^|\.)youtube\.com$/.test(new URL(url).hostname.toLowerCase())) void wc.executeJavaScript(YT_NOADS, true).catch(() => {});
+        noAds(url);
       } catch {
         /* not a page we care about */
       }
