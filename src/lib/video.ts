@@ -88,7 +88,7 @@ export const YT_ERRORS: Record<number, string> = {
   5: "The browser's video engine choked on this one.",
   100: "The video was removed, or it is private.",
   101: "The uploader turned off embedding for this video.",
-  150: "The uploader turned off embedding for this video.",
+  150: "YouTube refused to embed this one — usually the uploader turned embedding off.",
   153: "YouTube refused the embed from this app (player configuration error).",
 };
 

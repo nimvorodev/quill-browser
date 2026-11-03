@@ -345,7 +345,7 @@ export function TubeView({
           <TubeHome history={history} onSearch={onSearch} onNavigate={onNavigate} follows={follows} toggleFollow={toggleFollow} seenVids={seenVids} setSeenVids={setSeenVids} />
         )}
         {(vref.kind === "watch" || vref.kind === "shorts" || vref.kind === "playlist") && (
-          <WatchLayout vref={vref} onNavigate={onNavigate} onOpenOutside={onOpenOutside} muted={muted} onAudible={onAudible} tabKey={webviewKey} />
+          <WatchLayout vref={vref} onNavigate={onNavigate} onOpenOutside={onOpenOutside} onMode={onMode} muted={muted} onAudible={onAudible} tabKey={webviewKey} />
         )}
         {(vref.kind === "search" || vref.kind === "channel") && (
           <ResultsGrid
@@ -367,6 +367,7 @@ function WatchLayout({
   vref,
   onNavigate,
   onOpenOutside,
+  onMode,
   muted,
   onAudible,
   tabKey,
@@ -374,6 +375,7 @@ function WatchLayout({
   vref: VideoRef;
   onNavigate: (href: string) => void;
   onOpenOutside: (href: string) => void;
+  onMode?: (m: DeskMode) => void;
   muted?: boolean;
   onAudible?: (audible: boolean) => void;
   tabKey?: string;
@@ -557,14 +559,17 @@ function WatchLayout({
                     {YT_ERRORS[code] || "YouTube couldn't play it here."} <span className="text-ink3">(YouTube code {code})</span>
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button onClick={() => onOpenOutside(watchUrl(id))} className="hd btn-sketch bg-yellow px-3 py-1 text-[15px] text-[#1a2440]">
-                      open on YouTube ↗
+                    <button onClick={() => onMode?.("original")} className="hd btn-sketch bg-yellow px-3 py-1 text-[15px] text-[#1a2440]">
+                      play it on the real page →
                     </button>
                     {next && (
                       <button onClick={() => onNavigate(watchUrl(next.id))} className="hd-soft btn-sketch bg-paper3 px-3 py-1 text-[15px] text-ink">
                         play a similar video
                       </button>
                     )}
+                    <button onClick={() => onOpenOutside(watchUrl(id))} className="hd-soft btn-sketch bg-paper3 px-3 py-1 text-[15px] text-ink">
+                      open outside ↗
+                    </button>
                   </div>
                 </div>
               </div>
