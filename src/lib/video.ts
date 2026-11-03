@@ -11,6 +11,19 @@ export interface VideoRef {
   list?: string;
   query?: string;
   channelPath?: string;
+  /** Timestamp to start at (seconds), from a shared &t= link. */
+  t?: number;
+}
+
+/** YouTube timestamp formats: "90s", "1m30s", or plain "90". */
+function parseT(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const m = raw.match(/^(?:(\d+)m)?(\d*)s?$/);
+  if (!m) return undefined;
+  const min = m[1] ? parseInt(m[1], 10) : 0;
+  const sec = m[2] ? parseInt(m[2], 10) : 0;
+  const t = min * 60 + sec;
+  return t > 0 ? t : undefined;
 }
 
 export function parseVideo(raw: string): VideoRef | null {
@@ -23,18 +36,19 @@ export function parseVideo(raw: string): VideoRef | null {
   const host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
   if (host === "youtu.be") {
     const id = u.pathname.split("/").filter(Boolean)[0];
-    return id ? { kind: "watch", id, list: u.searchParams.get("list") || undefined } : { kind: "home" };
+    return id ? { kind: "watch", id, list: u.searchParams.get("list") || undefined, t: parseT(u.searchParams.get("t")) } : { kind: "home" };
   }
   if (host !== "youtube.com" && host !== "youtube-nocookie.com") return null;
 
   const parts = u.pathname.split("/").filter(Boolean);
   const v = u.searchParams.get("v");
   const list = u.searchParams.get("list") || undefined;
-  if (parts[0] === "watch" && v) return { kind: "watch", id: v, list };
+  const t = parseT(u.searchParams.get("t") || u.searchParams.get("start"));
+  if (parts[0] === "watch" && v) return { kind: "watch", id: v, list, t };
   if (parts[0] === "shorts" && parts[1]) return { kind: "shorts", id: parts[1] };
   if (parts[0] === "embed" && parts[1] === "videoseries") return { kind: "playlist", list };
-  if (parts[0] === "embed" && parts[1]) return { kind: "watch", id: parts[1], list };
-  if (parts[0] === "live" && parts[1]) return { kind: "watch", id: parts[1] };
+  if (parts[0] === "embed" && parts[1]) return { kind: "watch", id: parts[1], list, t };
+  if (parts[0] === "live" && parts[1]) return { kind: "watch", id: parts[1], t };
   if (parts[0] === "playlist") return { kind: "playlist", list };
   if (parts[0] === "results") return { kind: "search", query: u.searchParams.get("search_query") || "" };
   if (parts[0] && (parts[0].startsWith("@") || parts[0] === "channel" || parts[0] === "c" || parts[0] === "user")) {

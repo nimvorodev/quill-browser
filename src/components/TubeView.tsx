@@ -38,7 +38,7 @@ const tubePlayers = new Map<string, { mute: () => void; unmute: () => void; time
 
 type Phase = "loading" | "ready" | "error" | "iframe";
 
-/** Audio wiring for the embedded player: what the tab strip shows and controls. */
+/** Extra player wiring: what the tab strip shows/controls, and where to start. */
 interface PlayerAudio {
   /** Tab id — the registry key. */
   key?: string;
@@ -46,6 +46,8 @@ interface PlayerAudio {
   muted?: boolean;
   /** Player started/stopped being audible. */
   onAudible?: (audible: boolean) => void;
+  /** Fallback start position (a shared &t= link with no saved position). */
+  startAt?: number;
 }
 
 /**
@@ -85,7 +87,8 @@ function useYouTubePlayer(id: string | undefined, list: string | undefined, onEn
           if (!id) playerVars.listType = "playlist";
         }
         if (audioRef.current.muted) playerVars.mute = 1;
-        const resume = id ? loadWatchPos(id) : 0;
+        // Saved position wins; a shared &t= link is the fallback.
+        const resume = (id ? loadWatchPos(id) : 0) || audioRef.current.startAt || 0;
         if (resume) playerVars.start = Math.floor(resume);
         player = new YT.Player(mount, {
           host: "https://www.youtube-nocookie.com",
@@ -334,7 +337,7 @@ function WatchLayout({
       setCount(6);
       setEnded(true);
     }
-  }, { key: tabKey, muted, onAudible });
+  }, { key: tabKey, muted, onAudible, startAt: vref.t });
 
   // Tab-strip mute reaches the embedded player through the registry (the one
   // surface WebFrame can't control). Re-applied when the player is recreated.
@@ -552,7 +555,9 @@ function WatchLayout({
               {playlistItems.map((v) => (
                 <button
                   key={v.id + v.title}
-                  onClick={() => onNavigate(watchUrl(v.id))}
+                  // Keep the list param so the playlist keeps playing — a bare
+                  // watch URL would drop the queue.
+                  onClick={() => onNavigate(`${watchUrl(v.id)}&list=${encodeURIComponent(list)}`)}
                   className={["hd-soft flex w-full items-center gap-2 p-1 text-left", v.id === id ? "bg-yellow/40" : "hover:bg-paper3/60"].join(" ")}
                   style={{ borderRadius: "10px 3px 12px 3px" }}
                 >
