@@ -1971,6 +1971,24 @@ function BlockedCard({
 
 /* ---------------- ambient ink doodles ---------------- */
 function Ambient() {
+  // CPU: the drift animation keeps the compositor working every frame. Freeze
+  // it whenever nobody can see it — window minimized/occluded (document.hidden)
+  // or focus in another app. It resumes the instant you look back.
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    const onVis = () => setPaused(document.hidden);
+    const onBlur = () => setPaused(true);
+    const onFocus = () => setPaused(document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    onVis();
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
   const bits = [
     { d: "M4 30 C 14 6, 30 6, 40 24 S 62 40, 72 14", x: "4%", y: "16%", w: 120, c: "var(--pink)", r: -6, dur: "11s" },
     { d: "M10 10 L 34 34 M 34 34 L 22 32 M 34 34 L 32 22", x: "86%", y: "12%", w: 60, c: "var(--violet)", r: 8, dur: "9s" },
@@ -1980,7 +1998,7 @@ function Ambient() {
     { d: "M20 4 a16 16 0 1 0 0.1 0 M20 12 a8 8 0 1 0 0.1 0", x: "92%", y: "44%", w: 70, c: "var(--yellow)", r: 4, dur: "12s" },
   ];
   return (
-    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-[0.42]">
+    <div className={`pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-[0.42]${paused ? " ambient-paused" : ""}`}>
       {bits.map((b, i) => (
         <svg key={i} width={b.w} height={b.w * 0.6} viewBox={`0 0 ${b.w} ${b.w * 0.6}`} className="drift absolute" style={{ left: b.x, top: b.y, ["--r" as any]: `${b.r}deg`, ["--d" as any]: b.dur }}>
           <path d={b.d} stroke={b.c} strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.55" />

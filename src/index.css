@@ -258,6 +258,10 @@ body {
 .drift {
   animation: drift var(--d, 9s) ease-in-out infinite;
 }
+/* Frozen while nobody is looking: window hidden/unfocused. */
+.ambient-paused .drift {
+  animation-play-state: paused;
+}
 
 @keyframes draw {
   to {
