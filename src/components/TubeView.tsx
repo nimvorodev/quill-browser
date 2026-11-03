@@ -20,7 +20,7 @@ import { Icon } from "./Icons";
 import { SearchBox } from "./SearchBox";
 import { isDesktop } from "../lib/platform";
 import { DeskModeSwitch, type DeskMode } from "./DeskHeader";
-import { WebFrame } from "./WebFrame";
+import { WebFrame, type WebviewEl } from "./WebFrame";
 
 const STARTERS = ["lofi hip hop", "nature documentary", "piano lessons", "css grid tutorial", "space telescope"];
 const YT_ENGINE = ENGINES.find((e) => e.id === "youtube") ?? ENGINES[0];
@@ -113,6 +113,10 @@ export function TubeView({
   nonce = 0,
   onFrameNavigate,
   onTitle,
+  webviewMap,
+  webviewKey,
+  muted,
+  onAudible,
 }: {
   url: string;
   history: HistoryEntry[];
@@ -126,6 +130,10 @@ export function TubeView({
   nonce?: number;
   onFrameNavigate?: (href: string) => void;
   onTitle?: (t: string) => void;
+  webviewMap?: React.MutableRefObject<Map<string, WebviewEl>>;
+  webviewKey?: string;
+  muted?: boolean;
+  onAudible?: (audible: boolean) => void;
 }) {
   const vref: VideoRef = parseVideo(url) ?? { kind: "home" };
 
@@ -152,6 +160,10 @@ export function TubeView({
             referrer="strict-origin-when-cross-origin"
             onTitle={(t) => onTitle?.(t)}
             onNavigate={onFrameNavigate}
+            elMap={webviewMap}
+            elKey={webviewKey}
+            muted={muted}
+            onAudible={onAudible}
           />
         </div>
       </div>

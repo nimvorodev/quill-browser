@@ -171,8 +171,8 @@ export function SearchView({
           <>
             {imgs && imgs.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {imgs.map((h) => (
-                  <div key={h.image} className="group hd overflow-hidden border-2 border-ink bg-paper2">
+                {imgs.map((h, i) => (
+                  <div key={i + h.image} className="group hd overflow-hidden border-2 border-ink bg-paper2">
                     <button
                       onClick={() => onOpen(h.image, true)}
                       title={h.title || h.image}
@@ -240,7 +240,7 @@ export function SearchView({
             ) : (
               <ol className="space-y-2.5">
                 {run.hits.map((hit, i) => (
-                  <ResultCard key={hit.url} hit={hit} rank={i + 1} onOpen={onOpen} />
+                  <ResultCard key={hit.url + i} hit={hit} rank={i + 1} onOpen={onOpen} />
                 ))}
               </ol>
             )}

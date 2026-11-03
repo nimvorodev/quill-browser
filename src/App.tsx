@@ -26,11 +26,15 @@ import { DEFAULT_SETTINGS, type DefaultPageView, type Settings } from "./lib/set
 import { parseVideo } from "./lib/video";
 import { parseGitHub } from "./lib/github";
 import { pushRecent } from "./lib/search";
+import { parseBackup } from "./lib/backup";
+import type { WebviewEl } from "./components/WebFrame";
+import type { TabMenuAction } from "./components/TabStrip";
 import {
   PREFIX,
   uid,
   useLocal,
   wipeStorage,
+  computeKeepAlive,
   NOTE_DEFAULT_H,
   NOTE_DEFAULT_W,
   type Bookmark,
@@ -222,6 +226,40 @@ export default function App() {
   const [focus, setFocus] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  /* ---------------- find in page (Ctrl/⌘+F) ---------------- */
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQ, setFindQ] = useState("");
+  const [findInfo, setFindInfo] = useState({ active: 0, matches: 0 });
+  // Every mounted live webview, keyed by tab id: the active tab's is the find/PDF target.
+  const webviewMap = useRef<Map<string, WebviewEl>>(new Map());
+  const onFoundInPage = useCallback((info: { active: number; matches: number }) => setFindInfo(info), []);
+  /* ---------------- live-view keep-alive ----------------
+     The active tab's live view renders in a persistent layer (like the tube
+     desk), so its webview element survives tab switches. Tabs that were
+     playing audio stay mounted in the background — LRU-capped. */
+  const [keepAlive, setKeepAlive] = useState<Set<string>>(new Set());
+  // One render behind activeId, so the layer of the tab being left never
+  // unmounts before keepAlive has caught up (a remount would restart media).
+  const prevActiveRef = useRef(activeId);
+  useEffect(() => {
+    const left = prevActiveRef.current;
+    prevActiveRef.current = activeId;
+    setKeepAlive((prev) => {
+      const next = computeKeepAlive(tabs, prev, activeId);
+      // Same active tab and no membership change: nothing to do. On a switch,
+      // always return a fresh set so a re-render follows — that is what drops
+      // the left tab's layer when it didn't earn keep-alive.
+      if (left === activeId && next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
+      return next;
+    });
+  }, [tabs, activeId]);
+  // The find bar belongs to the page, not the window: switch tabs = start over.
+  useEffect(() => {
+    setFindOpen(false);
+    setFindQ("");
+    setFindInfo({ active: 0, matches: 0 });
+    try { webviewMap.current.get(activeId)?.stopFindInPage("clearSelection"); } catch { /* not ready */ }
+  }, [activeId]);
 
   // Desktop: real downloads land in the system Downloads folder; every state change feeds the drawer.
   useEffect(() => {
@@ -300,6 +338,57 @@ export default function App() {
   const patch = useCallback((id: string, fn: (t: Tab) => Tab) => {
     setTabs((ts) => ts.map((t) => (t.id === id ? fn(t) : t)));
   }, []);
+
+  const runFind = useCallback(
+    (dir: 1 | -1) => {
+      const q = findQ.trim();
+      if (!q) return;
+      const el = webviewMap.current.get(activeId);
+      if (el) {
+        try { el.findInPage(q, { forward: dir > 0, findNext: true }); } catch { /* not ready */ }
+      } else {
+        // ponytail: reader/desk pages use legacy window.find — no match count, no highlight-all.
+        const find = (window as unknown as { find?: (q: string, caseSensitive?: boolean, backwards?: boolean, wrap?: boolean) => boolean }).find;
+        try { find?.(q, false, dir < 0, true); } catch { /* unsupported */ }
+      }
+    },
+    [findQ, activeId],
+  );
+  const closeFind = useCallback(() => {
+    setFindOpen(false);
+    try { webviewMap.current.get(activeId)?.stopFindInPage("clearSelection"); } catch { /* not ready */ }
+  }, [activeId]);
+  const savePdf = useCallback(async () => {
+    const el = tab ? webviewMap.current.get(tab.id) : undefined;
+    if (!tab || !el || !desktop) return toast("open the real page first — then print", "var(--orange)", "info");
+    const ok = await desktop.savePdf(el.getWebContentsId(), tab.title || hostOf(tab.url));
+    toast(ok ? "PDF saved to Downloads" : "couldn't print this page", ok ? "var(--lime)" : "var(--red)", ok ? "download" : "x");
+  }, [tab, toast]);
+  /* ---------------- backup / restore ---------------- */
+  const exportBackup = useCallback(() => {
+    const payload = { v: 1 as const, at: Date.now(), settings, history, bookmarks, notes };
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    a.download = `quill-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast("backup saved to Downloads", "var(--lime)", "download");
+  }, [settings, history, bookmarks, notes, toast]);
+  const importBackup = useCallback(
+    async (file: File) => {
+      const b = parseBackup(await file.text());
+      if (!b) return toast("that's not a Quill backup", "var(--red)", "x");
+      if (b.settings) setSettings((s) => ({ ...s, ...b.settings }));
+      if (b.history)
+        setHistory((h) =>
+          [...b.history!, ...h.filter((x) => !b.history!.some((y) => y.url === x.url))].sort((x, y) => y.at - x.at).slice(0, 400),
+        );
+      if (b.bookmarks) setBookmarks((bs) => [...b.bookmarks!, ...bs.filter((x) => !b.bookmarks!.some((y) => y.url === x.url))]);
+      if (b.notes) setNotes((ns) => [...b.notes!, ...ns.filter((x) => !b.notes!.some((y) => y.id === x.id))]);
+      toast("backup restored", "var(--lime)", "check");
+    },
+    [setSettings, setHistory, setBookmarks, setNotes, toast],
+  );
 
   const addBlocked = useCallback(
     (list: BlockResult[]) => {
@@ -492,7 +581,9 @@ export default function App() {
         stageNote: relay ? "contacting relays…" : "",
         blocked: hit ? [hit, ...paramBlocked] : [...paramBlocked],
       }));
-      setInput(url);
+      // The address bar belongs to the active tab — a background tab (e.g. tube
+      // desk autoplay) must not rewrite it.
+      if (target.id === activeId) setInput(url);
 
       if (hit) {
         abortTabFetch(target.id);
@@ -500,11 +591,10 @@ export default function App() {
         toast(`blocked ${hostOf(url)} before it loaded`, "var(--red)", "shield");
         return;
       }
-      recordHistory(url, title, target.ghost);
       if (relay) loadReader(target.id, url, title, target.ghost, filters, false, paramBlocked);
       else abortTabFetch(target.id);
     },
-    [engine, settings.httpsOnly, filtersFor, defaultNavMode, abortTabFetch, patch, addBlocked, recordHistory, loadReader, toast],
+    [engine, settings.httpsOnly, filtersFor, defaultNavMode, abortTabFetch, patch, addBlocked, recordHistory, loadReader, toast, activeId],
   );
 
   const go = useCallback(
@@ -548,6 +638,65 @@ export default function App() {
       });
     },
     [activeId, settings.ghostDefault, settings.defaultView, abortTabFetch],
+  );
+
+  /* ---------------- tab menu (right-click) ---------------- */
+  /** Close every tab `keep` says no to; pinned tabs survive everything. */
+  const cullTabs = (keep: (t: Tab, i: number) => boolean, preferId?: string) => {
+    const next = tabs.filter((t, i) => keep(t, i) || t.pinned);
+    // Culled tabs may still have a relay fetch in flight — stop it, like closeTab does.
+    for (const gone of tabs) if (!next.includes(gone)) {
+      abortTabFetch(gone.id);
+      reqGenRef.current.delete(gone.id);
+    }
+    setTabs(next);
+    if (next.length !== tabs.length) toast(`${tabs.length - next.length} tab${tabs.length - next.length === 1 ? "" : "s"} closed`, "var(--red)", "close");
+    if (!next.some((t) => t.id === activeId)) {
+      // The tab you acted on (it always survives the cull) becomes active — a pinned tab only wins if the target is gone.
+      setActiveId(next.some((t) => t.id === preferId) ? preferId! : next.find((t) => t.pinned)?.id ?? next[0]?.id ?? "");
+    }
+  };
+  const reloadTab = useCallback(
+    (id: string) => {
+      const t = tabs.find((x) => x.id === id);
+      if (!t) return;
+      patch(id, (x) => ({ ...x, nonce: x.nonce + 1 }));
+      if (t.url === HOME || selfRenders(t.url)) return;
+      if ((t.view === "original" || t.view === "live") && t.originalMode === "live") return;
+      loadReader(id, t.url, t.title, t.ghost, filtersFor(t.allow, t.deny), true);
+    },
+    [tabs, patch, loadReader, filtersFor],
+  );
+  const duplicateTab = useCallback(
+    (id: string) => {
+      const i = tabs.findIndex((x) => x.id === id);
+      if (i < 0) return;
+      const t = tabs[i];
+      const copy = { ...newTab(t.ghost, t.originalMode), url: t.url, title: t.title, view: t.view, stack: [t.url], idx: 0 };
+      setTabs((ts) => [...ts.slice(0, i + 1), copy, ...ts.slice(i + 1)]);
+      setActiveId(copy.id);
+    },
+    [tabs],
+  );
+  const onTabMenu = useCallback(
+    (action: TabMenuAction, id: string) => {
+      const t = tabs.find((x) => x.id === id);
+      if (!t) return;
+      if (action === "reload") reloadTab(id);
+      else if (action === "duplicate") duplicateTab(id);
+      else if (action === "pin") patch(id, (x) => ({ ...x, pinned: !x.pinned }));
+      else if (action === "mute") patch(id, (x) => ({ ...x, muted: !x.muted }));
+      else if (action === "close") closeTab(id);
+      else if (action === "close-others") cullTabs((x) => x.id === id, id);
+      else if (action === "close-right") {
+        const i = tabs.findIndex((x) => x.id === id);
+        if (i >= 0) cullTabs((_x, j) => j <= i, id);
+      } else if (action === "close-site") {
+        const host = hostOf(t.url);
+        cullTabs((x) => x.id === id || hostOf(x.url) !== host, id);
+      }
+    },
+    [tabs, reloadTab, duplicateTab, patch, closeTab],
   );
 
   const travel = useCallback(
@@ -701,6 +850,8 @@ export default function App() {
     else if (cmd === "close-tab" && tab) closeTab(tab.id);
     else if (cmd === "reload") reload();
     else if (cmd === "palette") setPalette((p) => !p);
+    else if (cmd === "find") setFindOpen(true);
+    else if (cmd === "save-pdf") void savePdf();
   };
   openUrlRef.current = (url) => {
     if (/^https?:\/\//i.test(url)) openNew(url);
@@ -728,6 +879,13 @@ export default function App() {
     if (k === "k") {
       e.preventDefault();
       setPalette((p) => !p);
+    } else if (k === "f" && !desktop) {
+      // Web build: no native menu, so the renderer handles it here.
+      e.preventDefault();
+      setFindOpen(true);
+    } else if (k === "p" && !e.shiftKey && !desktop) {
+      e.preventDefault();
+      void savePdf();
     } else if (k === "t") {
       e.preventDefault();
       openNew();
@@ -819,6 +977,19 @@ export default function App() {
     const list: Command[] = [
       { id: "new", label: "New tab", section: "tabs", icon: "plus", hint: "Ctrl/⌘+T", run: () => openNew() },
       { id: "close", label: "Close this tab", section: "tabs", icon: "close", hint: "Ctrl/⌘+W", run: () => tab && closeTab(tab.id) },
+      ...tabs
+        .filter((t) => t.id !== activeId)
+        .map((t) => ({
+          id: "tab-" + t.id,
+          label: `Switch to ${t.title || hostOf(t.url)}`,
+          section: "open tabs",
+          icon: t.ghost ? "ghost" : "globe",
+          hint: prettyUrl(t.url),
+          keywords: t.url,
+          run: () => setActiveId(t.id),
+        })),
+      { id: "pdf", label: "Save this page as PDF", section: "page view", icon: "download", hint: "Ctrl/⌘+P", keywords: "print pdf export save", run: () => void savePdf() },
+      { id: "find", label: "Find in this page", section: "page view", icon: "search", hint: "Ctrl/⌘+F", keywords: "find search text", run: () => setFindOpen(true) },
       { id: "home", label: "Go home", section: "navigate", icon: "home", hint: "Alt+Home", run: () => go(HOME, "start") },
       { id: "tube", label: "Open the tube desk (YouTube)", section: "navigate", icon: "layers", keywords: "youtube video tube", run: () => go("https://www.youtube.com") },
       { id: "gh", label: "Open the GitHub desk", section: "navigate", icon: "branch", keywords: "github repos code", run: () => go("https://github.com/trending") },
@@ -908,6 +1079,7 @@ export default function App() {
       { id: "bm", label: "Bookmarks", section: "tools", icon: "book", hint: "Ctrl/⌘+B", run: () => setDrawer("bookmarks") },
       { id: "hist", label: "History", section: "tools", icon: "history", hint: "Ctrl/⌘+H", run: () => setDrawer("history") },
       { id: "settings", label: "Settings", section: "tools", icon: "gear", run: () => setDrawer("settings") },
+      { id: "backup", label: "Back up everything (JSON)", section: "tools", icon: "download", keywords: "backup export save json", run: exportBackup },
       { id: "keys", label: "Keyboard shortcuts", section: "tools", icon: "keyboard", run: () => setDrawer("shortcuts") },
       {
         id: "theme",
@@ -966,6 +1138,8 @@ export default function App() {
     return list.filter((c) => c.id);
   }, [
     tab,
+    tabs,
+    activeId,
     settings,
     bookmarks,
     history,
@@ -983,6 +1157,8 @@ export default function App() {
     setSettings,
     setHistory,
     setAiCfg,
+    savePdf,
+    exportBackup,
     toast,
   ]);
 
@@ -1035,42 +1211,48 @@ export default function App() {
       />
     );
 
-  const renderOriginalPane = (compact = false) =>
-    tab && (
-      <LiveView
-        tab={tab}
-        subMode={tab.originalMode}
-        onSubMode={(m) => setTabView(compact ? "split" : "original", m)}
-        strict={settings.strictSandbox}
-        autoplay={!settings.blockAutoplay}
-        referrer={settings.noReferrer ? "no-referrer" : "strict-origin-when-cross-origin"}
-        zoom={tab.zoom}
-        onTitle={(t) => {
-          // Real page title from the live frame: patch the tab AND its history entry
-          // (tab.url tracks the webview, redirects included, so the match is exact).
-          patch(tab.id, (x) => ({ ...x, title: t.slice(0, 70) }));
-          setHistory((h) => {
-            const i = h.findIndex((x) => x.url === tab.url);
-            if (i < 0) return h;
-            const next = [...h];
-            next[i] = { ...h[i], title: t.slice(0, 70) };
-            return next;
-          });
-        }}
-        onReader={() => setTabView("reader")}
-        onSplit={() => setTabView(tab.view === "split" ? "original" : "split")}
-        onNavigate={(href, inNewTab) => (inNewTab ? openNew(href) : go(href))}
-        onFrameNavigate={(href) => frameNav(tab, href)}
-        onRetryHtml={() => loadReader(tab.id, tab.url, tab.title, tab.ghost, filtersFor(tab.allow, tab.deny), true)}
-        onOpenShields={() => setDrawer("privacy")}
-        dark={settings.darkOriginal}
-        onToggleDark={() => setSettings((s) => ({ ...s, darkOriginal: !s.darkOriginal }))}
-        zapped={zapsFor(tab.url)}
-        onZapped={(sel) => addZap(tab.url, sel)}
-        onResetZaps={() => resetZaps(tab.url)}
-        compact={compact}
-      />
-    );
+  const renderLivePane = (t: Tab, compact = false) => (
+    <LiveView
+      tab={t}
+      subMode={t.originalMode}
+      onSubMode={(m) => setTabView(compact ? "split" : "original", m)}
+      strict={settings.strictSandbox}
+      autoplay={!settings.blockAutoplay}
+      referrer={settings.noReferrer ? "no-referrer" : "strict-origin-when-cross-origin"}
+      zoom={t.zoom}
+      muted={t.muted === true}
+      onAudible={(a) => patch(t.id, (x) => (x.audible === a ? x : { ...x, audible: a }))}
+      onTitle={(tt) => {
+        // Real page title from the live frame: patch the tab AND its history entry
+        // (tab.url tracks the webview, redirects included, so the match is exact).
+        patch(t.id, (x) => ({ ...x, title: tt.slice(0, 70) }));
+        setHistory((h) => {
+          const i = h.findIndex((x) => x.url === t.url);
+          if (i < 0) return h;
+          const next = [...h];
+          next[i] = { ...h[i], title: tt.slice(0, 70) };
+          return next;
+        });
+      }}
+      onReader={() => setTabView("reader")}
+      onSplit={() => setTabView(t.view === "split" ? "original" : "split")}
+      onNavigate={(href, inNewTab) => (inNewTab ? openNew(href) : go(href))}
+      onFrameNavigate={(href) => frameNav(t, href)}
+      onRetryHtml={() => loadReader(t.id, t.url, t.title, t.ghost, filtersFor(t.allow, t.deny), true)}
+      onOpenShields={() => setDrawer("privacy")}
+      dark={settings.darkOriginal}
+      onToggleDark={() => setSettings((s) => ({ ...s, darkOriginal: !s.darkOriginal }))}
+      zapped={zapsFor(t.url)}
+      onZapped={(sel) => addZap(t.url, sel)}
+      onResetZaps={() => resetZaps(t.url)}
+      compact={compact}
+      webviewMap={webviewMap}
+      webviewKey={t.id}
+      onFoundInPage={onFoundInPage}
+    />
+  );
+
+  const renderOriginalPane = (compact = false) => (tab ? renderLivePane(tab, compact) : null);
 
   return (
     <div className="paper-bg grain relative flex h-full flex-col overflow-hidden">
@@ -1085,6 +1267,8 @@ export default function App() {
           onClose={closeTab}
           onNew={() => openNew()}
           onPin={(id) => patch(id, (t) => ({ ...t, pinned: !t.pinned }))}
+          onMute={(id) => patch(id, (t) => ({ ...t, muted: !t.muted }))}
+          onMenuAction={onTabMenu}
           onReorder={(from, to) =>
             setTabs((ts) => {
               const next = [...ts];
@@ -1155,8 +1339,8 @@ export default function App() {
                 <TubeView
                   url={t.url}
                   history={history}
-                  onNavigate={(href) => go(href)}
-                  onSearch={(text) => go(text, undefined, undefined, undefined, "youtube")}
+                  onNavigate={(href) => go(href, undefined, t.id)}
+                  onSearch={(text) => go(text, undefined, t.id, undefined, "youtube")}
                   onOpenOutside={openOutside}
                   onLive={() => {
                     if (t.id === activeId) setTabView("original", "live");
@@ -1167,7 +1351,34 @@ export default function App() {
                   nonce={t.nonce}
                   onFrameNavigate={(href) => frameNav(t, href)}
                   onTitle={(tt) => patch(t.id, (x) => ({ ...x, title: tt.slice(0, 70) }))}
+                  webviewMap={webviewMap}
+                  webviewKey={t.id}
+                  muted={t.muted === true}
+                  onAudible={(a) => patch(t.id, (x) => (x.audible === a ? x : { ...x, audible: a }))}
                 />
+              </div>
+            ))}
+
+          {/* Live-view layers, tube-desk style: the active original view renders here
+              (its webview element survives tab switches), and tabs that were
+              playing audio stay mounted in the background so media continues.
+              prevActiveRef keeps the just-left tab mounted for the one render
+              before keepAlive catches up — a remount would restart the media. */}
+          {tabs
+            .filter(
+              (t) =>
+                (t.view === "original" || t.view === "live") &&
+                !t.error?.startsWith("BLOCKED:") &&
+                (keepAlive.has(t.id) || t.id === tab?.id || t.id === prevActiveRef.current),
+            )
+            .map((t) => (
+              <div
+                key={`live-${t.id}`}
+                className="absolute inset-0"
+                style={{ display: t.id === tab?.id ? "block" : "none" }}
+                aria-hidden={t.id !== tab?.id}
+              >
+                {renderLivePane(t)}
               </div>
             ))}
           {!tab || tab.view === "start" ? (
@@ -1237,7 +1448,55 @@ export default function App() {
           ) : tab.view === "reader" && parseVideo(tab.url) ? null : tab.view === "reader" ? (
             renderReaderPane(false)
           ) : (
-            renderOriginalPane(false)
+            // Original/live view: rendered by the keep-alive layer above, whose
+            // webview survives tab switches. This branch stays empty on purpose.
+            null
+          )}
+
+          {/* find-in-page bar */}
+          {findOpen && (
+            <div
+              className="no-drag absolute right-3 top-2 z-40 flex items-center gap-1 border-2 border-ink bg-paper2/95 py-1 pl-2 pr-1 text-ink ink-shadow-sm"
+              style={{ borderRadius: "14px 4px 16px 4px / 4px 16px 4px 14px" }}
+            >
+              <Icon name="search" size={14} className="text-ink2" />
+              <input
+                autoFocus
+                value={findQ}
+                onChange={(e) => {
+                  setFindQ(e.target.value);
+                  if (!e.target.value) {
+                    setFindInfo({ active: 0, matches: 0 });
+                    try { webviewMap.current.get(activeId)?.stopFindInPage("clearSelection"); } catch { /* not ready */ }
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    runFind(e.shiftKey ? -1 : 1);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeFind();
+                  }
+                }}
+                placeholder="find in this page"
+                className="w-44 bg-transparent text-[15px] outline-none placeholder:text-ink3/70"
+              />
+              {findQ.trim() !== "" && webviewMap.current.get(activeId) && (
+                <span className="min-w-[46px] text-right text-[13px] tabular-nums text-ink3">
+                  {findInfo.matches ? `${findInfo.active}/${findInfo.matches}` : "—"}
+                </span>
+              )}
+              <button onClick={() => runFind(-1)} title="Previous match (Shift+Enter)" className="hd-soft px-1 text-[15px] leading-none text-ink2 hover:bg-paper3">
+                ↑
+              </button>
+              <button onClick={() => runFind(1)} title="Next match (Enter)" className="hd-soft px-1 text-[15px] leading-none text-ink2 hover:bg-paper3">
+                ↓
+              </button>
+              <button onClick={closeFind} title="Close (Esc)" className="hd-soft px-1 text-ink2 hover:bg-red/20">
+                <Icon name="close" size={13} />
+              </button>
+            </div>
           )}
 
           {/* floating view switcher */}
@@ -1400,6 +1659,8 @@ export default function App() {
                 }
               : undefined
           }
+          onBackup={exportBackup}
+          onRestore={(f) => void importBackup(f)}
           onClear={(what) => {
             if (what === "history") {
               setHistory([]);

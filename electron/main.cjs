@@ -9,7 +9,7 @@
 //  - window.open from any web content is routed to the system browser.
 //  - Ad/tracker hosts are blocked at the network layer for the web partition.
 
-const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu, webContents } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -319,10 +319,12 @@ function buildMenu() {
         { label: "New Tab", accelerator: "CmdOrCtrl+T", click: () => win?.webContents.send("quill:cmd", "new-tab") },
         { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: () => win?.webContents.send("quill:cmd", "close-tab") },
         { type: "separator" },
+        { label: "Save as PDF…", accelerator: "CmdOrCtrl+P", click: () => win?.webContents.send("quill:cmd", "save-pdf") },
+        { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
       ],
     },
-    { label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
+    { label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }, { type: "separator" }, { label: "Find…", accelerator: "CmdOrCtrl+F", click: () => win?.webContents.send("quill:cmd", "find") }] },
     {
       label: "View",
       submenu: [
@@ -373,6 +375,24 @@ ipcMain.handle("quill:set-doh", (_e, enabled) => {
   try {
     fs.mkdirSync(app.getPath("userData"), { recursive: true });
     fs.writeFileSync(path.join(app.getPath("userData"), "doh.json"), JSON.stringify({ enabled: enabled === true }));
+    return true;
+  } catch {
+    return false;
+  }
+});
+ipcMain.handle("quill:save-pdf", async (_e, wcId, name) => {
+  // The renderer names the webContents to print; fromId validates the id, the
+  // filename is re-sanitised, and the file never leaves the Downloads folder.
+  try {
+    const wc = Number.isInteger(wcId) ? webContents.fromId(wcId) : null;
+    if (!wc || wc.isDestroyed()) return false;
+    const data = await wc.printToPDF({ printBackground: true });
+    const safe = (String(name || "").replace(/[^\w\- .]+/g, "").trim().slice(0, 80)) || "page";
+    let savePath = path.join(app.getPath("downloads"), `${safe}.pdf`);
+    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${safe} (${i}).pdf`);
+    fs.writeFileSync(savePath, data);
+    // Reuse the downloads drawer: it lands there as a finished download.
+    win?.webContents.send("quill:download", { id: `pdf-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: data.length, total: data.length, state: "completed" });
     return true;
   } catch {
     return false;

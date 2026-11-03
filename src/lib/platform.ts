@@ -42,6 +42,8 @@ export interface DesktopBridge {
   setDoh(enabled: boolean): Promise<boolean>;
   /** Real <title> of a webview page, delivered as it loads and changes. */
   onFrameTitle(cb: (info: { url: string; title: string }) => void): () => void;
+  /** Print a webview page to PDF; the file lands in the system Downloads folder. */
+  savePdf(webContentsId: number, name: string): Promise<boolean>;
   /** Download progress from both the webviews and the renderer itself. */
   onDownload(cb: (item: DownloadItem) => void): () => void;
   /** Request desktop webview partition name (persisted, isolated from app). */

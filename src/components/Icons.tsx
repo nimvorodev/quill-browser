@@ -60,6 +60,8 @@ const P: Record<string, JSX.Element> = {
   antenna: (<><path d="M12 12v8.4" /><path d="M8.8 20.4h6.4" /><path d="M9 9a4.2 4.2 0 0 1 6 0" /><path d="M6.4 6.2a7.8 7.8 0 0 1 11.2 0" /><circle cx="12" cy="12" r="1.4" /></>),
   split: (<><rect x="3.6" y="4.4" width="16.8" height="15.2" rx="2.4" /><path d="M12 4.4v15.2" /></>),
   flame: <path d="M12 3.2s5 4 5 8.6a5 5 0 0 1-10 0c0-1.6.8-3 .8-3S9 11 10.4 11c0-2.8 1.6-6 1.6-7.8z" />,
+  speaker: (<><path d="M4 9.6h3.2L12 5.2v13.6L7.2 14.4H4z" /><path d="M15.2 9a4.4 4.4 0 0 1 0 6" /><path d="M17.8 6.6a8 8 0 0 1 0 10.8" /></>),
+  speakerOff: (<><path d="M4 9.6h3.2L12 5.2v13.6L7.2 14.4H4z" /><path d="m15.6 9.6 4.8 4.8M20.4 9.6l-4.8 4.8" /></>),
   heart: <path d="M12 20s-7.6-4.6-7.6-9.4A4.2 4.2 0 0 1 12 7.6a4.2 4.2 0 0 1 7.6 3c0 4.8-7.6 9.4-7.6 9.4z" />,
   target: (<><circle cx="12" cy="12" r="8.4" /><circle cx="12" cy="12" r="4.4" /><circle cx="12" cy="12" r="1" /></>),
   clock2: <path d="M12 6.4V12l4 2.4" />,

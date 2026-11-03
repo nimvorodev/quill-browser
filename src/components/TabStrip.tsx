@@ -6,10 +6,13 @@ import { desktop, isDesktop, isMac } from "../lib/platform";
 
 const TAB_COLORS = ["var(--yellow)", "var(--pink)", "var(--cyan)", "var(--lime)", "var(--orange)", "var(--violet)"];
 
+export type TabMenuAction = "reload" | "duplicate" | "pin" | "mute" | "close" | "close-others" | "close-right" | "close-site";
+
 /**
  * Tab strip. Tabs shrink to share the row (like Chrome/Brave) instead of
  * overflowing into a horizontal scrollbar. On desktop the empty space is a
  * window-drag region, and Windows/Linux get in-app window controls.
+ * Right-click a tab for the tab menu (close others/site, duplicate, mute…).
  */
 export function TabStrip({
   tabs,
@@ -22,6 +25,8 @@ export function TabStrip({
   onTheme,
   theme,
   onFocusMode,
+  onMute,
+  onMenuAction,
 }: {
   tabs: Tab[];
   activeId: string;
@@ -33,16 +38,28 @@ export function TabStrip({
   onTheme: () => void;
   theme: string;
   onFocusMode: () => void;
+  onMute?: (id: string) => void;
+  onMenuAction?: (action: TabMenuAction, id: string) => void;
 }) {
   const [drag, setDrag] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [maximized, setMaximized] = useState(false);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!desktop) return;
     void desktop.isMaximized().then(setMaximized);
     return desktop.onMaximizeChange(setMaximized);
   }, []);
+
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
 
   const crowded = tabs.length > 7;
   const tight = tabs.length > 12;
@@ -82,6 +99,10 @@ export function TabStrip({
               onClick={() => onSelect(t.id)}
               onAuxClick={(e) => {
                 if (e.button === 1) onClose(t.id);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ id: t.id, x: e.clientX, y: e.clientY });
               }}
               role="tab"
               aria-selected={active}
@@ -126,6 +147,19 @@ export function TabStrip({
               )}
               {!t.pinned && (
                 <span className="flex shrink-0 items-center gap-0.5">
+                  {(t.audible || t.muted) && !tight && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMute?.(t.id);
+                      }}
+                      className={["grid h-[18px] w-[18px] place-items-center rounded-full transition", t.muted ? "text-red" : "text-ink2 hover:text-ink"].join(" ")}
+                      title={t.muted ? "Unmute tab" : "Mute tab"}
+                      aria-label={t.muted ? "Unmute tab" : "Mute tab"}
+                    >
+                      <Icon name={t.muted ? "speakerOff" : "speaker"} size={13} />
+                    </button>
+                  )}
                   {!tight && (
                     <button
                       onClick={(e) => {
@@ -204,6 +238,50 @@ export function TabStrip({
           </span>
         )}
       </div>
+
+      {/* right-click tab menu */}
+      {menu && onMenuAction && (() => {
+        const t = tabs.find((x) => x.id === menu.id);
+        if (!t) return null;
+        const items: { key: TabMenuAction; label: string; icon: string; sep?: boolean; danger?: boolean }[] = [
+          { key: "reload", label: "Reload", icon: "reload" },
+          { key: "duplicate", label: "Duplicate", icon: "copy" },
+          { key: "pin", label: t.pinned ? "Unpin tab" : "Pin tab", icon: "pin" },
+          { key: "mute", label: t.muted ? "Unmute tab" : "Mute tab", icon: t.muted ? "speaker" : "speakerOff" },
+          { key: "close", label: "Close tab", icon: "close", sep: true, danger: true },
+          { key: "close-others", label: "Close other tabs", icon: "filter", danger: true },
+          { key: "close-right", label: "Close tabs to the right", icon: "forward", danger: true },
+          { key: "close-site", label: `Close all ${hostOf(t.url)} tabs`, icon: "trash", danger: true },
+        ];
+        const run = (action: TabMenuAction) => {
+          onMenuAction(action, t.id);
+          setMenu(null);
+        };
+        return (
+          <>
+            <div className="no-drag fixed inset-0 z-[84]" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+            <div
+              className="no-drag fixed z-[85] min-w-[210px] border-2 border-ink bg-paper2 py-1 text-ink ink-shadow"
+              style={{ left: Math.min(menu.x, window.innerWidth - 230), top: Math.min(menu.y, window.innerHeight - 260), borderRadius: "12px 4px 14px 4px / 4px 14px 4px 12px" }}
+              role="menu"
+            >
+              {items.map((it) => (
+                <div key={it.key}>
+                  {it.sep && <div className="mx-2 my-1 border-t border-dashed border-ink/30" />}
+                  <button
+                    onClick={() => run(it.key)}
+                    role="menuitem"
+                    className={["flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[15px] transition", it.danger ? "text-ink hover:bg-red hover:text-white" : "hover:bg-yellow/45"].join(" ")}
+                  >
+                    <Icon name={it.icon} size={14} />
+                    {it.label}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

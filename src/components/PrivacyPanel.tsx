@@ -35,6 +35,8 @@ export function PrivacyPanel({
   onAllow,
   onDeny,
   onRefetch,
+  onBackup,
+  onRestore,
 }: {
   tab: Tab;
   settings: Settings;
@@ -47,6 +49,10 @@ export function PrivacyPanel({
   onAllow: (host: string) => void;
   onDeny: (host: string) => void;
   onRefetch?: () => void;
+  /** Write settings + history + bookmarks + notes to a JSON file in Downloads. */
+  onBackup?: () => void;
+  /** Restore from a backup file the user picked. */
+  onRestore?: (file: File) => void;
 }) {
   const [confirm, setConfirm] = useState<string | null>(null);
   const maxCat = Math.max(1, ...Object.values(byCat));
@@ -216,6 +222,31 @@ export function PrivacyPanel({
             </button>
           ))}
         </div>
+        {(onBackup || onRestore) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {onBackup && (
+              <button onClick={onBackup} className="hd-soft btn-sketch flex items-center gap-1.5 bg-paper2 px-3 py-1 text-[15px] hover:bg-lime/40">
+                <Icon name="download" size={14} /> back everything up
+              </button>
+            )}
+            {onRestore && (
+              <label className="hd-soft btn-sketch flex cursor-pointer items-center gap-1.5 bg-paper2 px-3 py-1 text-[15px] hover:bg-yellow">
+                <Icon name="reload" size={14} /> restore a backup
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) onRestore(f);
+                  }}
+                />
+              </label>
+            )}
+            <span className="text-[13px] italic text-ink3">settings · history · bookmarks · notes — one JSON file in Downloads</span>
+          </div>
+        )}
       </section>
     </div>
   );

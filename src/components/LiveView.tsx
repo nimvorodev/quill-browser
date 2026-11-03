@@ -3,7 +3,7 @@ import { Icon } from "./Icons";
 import { hostOf, isFrameHostile } from "../lib/nav";
 import type { OriginalSubMode, Tab } from "../lib/store";
 import { isDesktop, openOutside } from "../lib/platform";
-import { WebFrame } from "./WebFrame";
+import { WebFrame, type WebviewEl } from "./WebFrame";
 
 /** A zap selector must be short, plain, and parseable — never trust frame input blindly. */
 function isSafeSelector(sel: string): boolean {
@@ -49,6 +49,15 @@ export interface LiveProps {
   onZapped: (selector: string) => void;
   onResetZaps: () => void;
   compact?: boolean;
+  /** Registry of mounted webviews by tab id (find-in-page, PDF). */
+  webviewMap?: React.MutableRefObject<Map<string, WebviewEl>>;
+  webviewKey?: string;
+  /** Find-in-page match counts from the live webview. */
+  onFoundInPage?: (info: { active: number; matches: number }) => void;
+  /** Media started/stopped being audible in this tab's webview. */
+  onAudible?: (audible: boolean) => void;
+  /** Mute state for this tab's webview. */
+  muted?: boolean;
 }
 
 const MODES: { id: OriginalSubMode; label: string; icon: string; tip: string }[] = [
@@ -416,6 +425,11 @@ export function LiveView(p: LiveProps) {
                 onTitle={p.onTitle}
                 onLoaded={() => setLoaded(true)}
                 onNavigate={p.onFrameNavigate}
+                elMap={p.webviewMap}
+                elKey={p.webviewKey}
+                onFoundInPage={p.onFoundInPage}
+                onAudible={p.onAudible}
+                muted={p.muted}
               />
             ) : (
               <iframe

@@ -23,9 +23,19 @@ export interface WebFrameProps {
   onLoaded?: () => void;
   onNewWindow?: (url: string) => void;
   canGoBackRef?: React.MutableRefObject<(() => boolean) | null>;
+  /** Registry of mounted webviews by tab id — find-in-page and PDF target the active one. */
+  elMap?: React.MutableRefObject<Map<string, WebviewEl>>;
+  /** Key under which this webview registers itself in elMap (the tab id). */
+  elKey?: string;
+  /** Find-in-page match counts from the webview. */
+  onFoundInPage?: (info: { active: number; matches: number }) => void;
+  /** Media started/stopped being audible in this webview. */
+  onAudible?: (audible: boolean) => void;
+  /** Mute state applied to this webview. */
+  muted?: boolean;
 }
 
-type WebviewEl = HTMLElement & {
+export type WebviewEl = HTMLElement & {
   src: string;
   loadURL(u: string): Promise<void>;
   getURL(): string;
@@ -35,6 +45,9 @@ type WebviewEl = HTMLElement & {
   reload(): void;
   setZoomFactor(f: number): void;
   setAudioMuted(m: boolean): void;
+  findInPage(text: string, opts?: { forward?: boolean; findNext?: boolean }): void;
+  stopFindInPage(action: "clearSelection" | "keepSelection"): void;
+  getWebContentsId(): number;
 };
 
 export function WebFrame(p: WebFrameProps) {
@@ -47,6 +60,9 @@ export function WebFrame(p: WebFrameProps) {
 function DesktopView(p: WebFrameProps) {
   const ref = useRef<WebviewEl | null>(null);
   const lastUrl = useRef(p.url);
+  // dom-ready can re-fire (reloads) long after mount; keep mute fresh through a ref.
+  const mutedRef = useRef(p.muted === true);
+  mutedRef.current = p.muted === true;
 
   // Mount: wire events once per element.
   useEffect(() => {
@@ -71,15 +87,28 @@ function DesktopView(p: WebFrameProps) {
     const onReady = () => {
       try {
         el.setZoomFactor(p.zoom / 100);
+        el.setAudioMuted(mutedRef.current);
       } catch {
         /* not ready */
       }
     };
+    const onFound = (e: Event) => {
+      const d = e as unknown as { activeMatchOrdinal: number; matches: number };
+      p.onFoundInPage?.({ active: d.activeMatchOrdinal, matches: d.matches });
+    };
+    // ponytail: any media element flipping play/pause moves the flag — a page
+    // with two players can briefly misreport. isCurrentlyAudible polling is
+    // the upgrade path if that ever bites.
+    const onMedia = (e: Event) => p.onAudible?.(e.type === "media-started-playing");
     el.addEventListener("page-title-updated", onTitle);
     el.addEventListener("did-navigate", onNav);
     el.addEventListener("did-navigate-in-page", onNav);
     el.addEventListener("did-stop-loading", onStop);
     el.addEventListener("dom-ready", onReady);
+    el.addEventListener("found-in-page", onFound);
+    el.addEventListener("media-started-playing", onMedia);
+    el.addEventListener("media-paused", onMedia);
+    if (p.elMap && p.elKey) p.elMap.current.set(p.elKey, el);
     if (p.canGoBackRef) {
       p.canGoBackRef.current = () => {
         try {
@@ -99,6 +128,10 @@ function DesktopView(p: WebFrameProps) {
       el.removeEventListener("did-navigate-in-page", onNav);
       el.removeEventListener("did-stop-loading", onStop);
       el.removeEventListener("dom-ready", onReady);
+      el.removeEventListener("found-in-page", onFound);
+      el.removeEventListener("media-started-playing", onMedia);
+      el.removeEventListener("media-paused", onMedia);
+      if (p.elMap && p.elKey && p.elMap.current.get(p.elKey) === el) p.elMap.current.delete(p.elKey);
       if (p.canGoBackRef) p.canGoBackRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,6 +164,14 @@ function DesktopView(p: WebFrameProps) {
       /* not ready */
     }
   }, [p.zoom]);
+
+  useEffect(() => {
+    try {
+      ref.current?.setAudioMuted(p.muted === true);
+    } catch {
+      /* not ready */
+    }
+  }, [p.muted]);
 
   // React doesn't know <webview>; create it imperatively so attributes land before load.
   return (
