@@ -244,10 +244,27 @@ export default function App() {
       if (!title || !/^https?:\/\//i.test(url)) return;
       const host = hostOf(url);
       const generic = (t: string) => !t || t === host || t === pageTitleFor(url);
-      setTabs((ts) => ts.map((t) => (t.url === url || (hostOf(t.url) === host && generic(t.title)) ? { ...t, title } : t)));
+      // Exact URL wins. The same-host fallback only applies when exactly one candidate
+      // still shows its bare hostname — with several same-host pages open, a title
+      // must never land on a sibling entry (findIndex would take the newest).
+      setTabs((ts) => {
+        const exact = ts.filter((t) => t.url === url);
+        let picks = exact;
+        if (!picks.length) {
+          const cand = ts.filter((t) => hostOf(t.url) === host && generic(t.title));
+          if (cand.length !== 1) return ts;
+          picks = cand;
+        }
+        const ids = new Set(picks.map((t) => t.id));
+        return ts.map((t) => (ids.has(t.id) ? { ...t, title } : t));
+      });
       setHistory((h) => {
-        const i = h.findIndex((x) => x.url === url || (hostOf(x.url) === host && generic(x.title)));
-        if (i < 0) return h;
+        let i = h.findIndex((x) => x.url === url);
+        if (i < 0) {
+          const cand = h.filter((x) => hostOf(x.url) === host && generic(x.title));
+          if (cand.length !== 1) return h;
+          i = h.indexOf(cand[0]);
+        }
         const next = [...h];
         next[i] = { ...h[i], title };
         return next;
