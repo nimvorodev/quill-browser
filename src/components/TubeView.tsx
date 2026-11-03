@@ -9,7 +9,12 @@ import {
   thumbUrl,
   watchUrl,
   youtubeChannel,
+  youtubePlaylist,
+  youtubeRelated,
   youtubeSearch,
+  clearWatchPos,
+  loadWatchPos,
+  saveWatchPos,
   YT_ERRORS,
   type OEmbed,
   type VideoHit,
@@ -26,16 +31,34 @@ const STARTERS = ["lofi hip hop", "nature documentary", "piano lessons", "css gr
 const YT_ENGINE = ENGINES.find((e) => e.id === "youtube") ?? ENGINES[0];
 const HEAD = { fontFamily: "var(--font-display)", fontWeight: 700 } as const;
 
+// Tube-desk audio: the IFrame player is the one thing the tab strip can't reach
+// through WebFrame, so each player registers its controls here, keyed by tab id.
+// ponytail: module-level map, one entry per playing tab — fine at this scale.
+const tubePlayers = new Map<string, { mute: () => void; unmute: () => void; time: () => number }>();
+
 type Phase = "loading" | "ready" | "error" | "iframe";
+
+/** Audio wiring for the embedded player: what the tab strip shows and controls. */
+interface PlayerAudio {
+  /** Tab id — the registry key. */
+  key?: string;
+  /** Start muted / apply mute changes. */
+  muted?: boolean;
+  /** Player started/stopped being audible. */
+  onAudible?: (audible: boolean) => void;
+}
 
 /**
  * Official YouTube player (IFrame API) on the privacy domain. Reports real error codes,
- * and falls back to a plain embed if the API script is blocked.
+ * and falls back to a plain embed if the API script is blocked. Remembers where each
+ * video was paused and resumes there; reports audible state for the tab strip.
  */
-function useYouTubePlayer(id: string | undefined, list: string | undefined, onEnded: () => void) {
+function useYouTubePlayer(id: string | undefined, list: string | undefined, onEnded: () => void, audio: PlayerAudio = {}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const endedRef = useRef(onEnded);
   endedRef.current = onEnded;
+  const audioRef = useRef(audio);
+  audioRef.current = audio;
   const [phase, setPhase] = useState<Phase>("loading");
   const [code, setCode] = useState<number | undefined>(undefined);
 
@@ -61,6 +84,9 @@ function useYouTubePlayer(id: string | undefined, list: string | undefined, onEn
           playerVars.list = list;
           if (!id) playerVars.listType = "playlist";
         }
+        if (audioRef.current.muted) playerVars.mute = 1;
+        const resume = id ? loadWatchPos(id) : 0;
+        if (resume) playerVars.start = Math.floor(resume);
         player = new YT.Player(mount, {
           host: "https://www.youtube-nocookie.com",
           width: "100%",
@@ -78,17 +104,45 @@ function useYouTubePlayer(id: string | undefined, list: string | undefined, onEn
               }
             },
             onStateChange: (e: { data: number }) => {
-              if (!cancelled && e.data === YT.PlayerState.ENDED) endedRef.current();
+              if (cancelled) return;
+              // 1 playing · 2 paused · 0 ended — anything else (buffering, cued) leaves the flag alone.
+              const audible = e.data === 1 ? true : e.data === 0 || e.data === 2 ? false : null;
+              if (audible !== null) audioRef.current.onAudible?.(audible);
+              if (e.data === YT.PlayerState.ENDED) {
+                if (id) clearWatchPos(id);
+                endedRef.current();
+              }
             },
           },
         });
+        if (audioRef.current.key) {
+          tubePlayers.set(audioRef.current.key, {
+            mute: () => { try { player?.mute(); } catch { /* gone */ } },
+            unmute: () => { try { player?.unMute(); } catch { /* gone */ } },
+            time: () => { try { return player ? Math.floor(player.getCurrentTime()) : 0; } catch { return 0; } },
+          });
+        }
       })
       .catch(() => {
         if (!cancelled) setPhase("iframe");
       });
 
+    // Remember the position every few seconds while the desk is open — cheap, and
+    // a crash or close still leaves a resume point behind.
+    const posTimer = id
+      ? window.setInterval(() => {
+          try {
+            if (player) saveWatchPos(id, player.getCurrentTime());
+          } catch {
+            /* not ready */
+          }
+        }, 5000)
+      : 0;
+
     return () => {
       cancelled = true;
+      if (posTimer) window.clearInterval(posTimer);
+      if (audioRef.current.key && tubePlayers.get(audioRef.current.key)) tubePlayers.delete(audioRef.current.key);
       try {
         player?.destroy();
       } catch {
@@ -228,7 +282,7 @@ export function TubeView({
 
         {vref.kind === "home" && <TubeHome history={history} onSearch={onSearch} onNavigate={onNavigate} />}
         {(vref.kind === "watch" || vref.kind === "shorts" || vref.kind === "playlist") && (
-          <WatchLayout vref={vref} onNavigate={onNavigate} onOpenOutside={onOpenOutside} />
+          <WatchLayout vref={vref} onNavigate={onNavigate} onOpenOutside={onOpenOutside} muted={muted} onAudible={onAudible} tabKey={webviewKey} />
         )}
         {(vref.kind === "search" || vref.kind === "channel") && (
           <ResultsGrid
@@ -248,15 +302,22 @@ function WatchLayout({
   vref,
   onNavigate,
   onOpenOutside,
+  muted,
+  onAudible,
+  tabKey,
 }: {
   vref: VideoRef;
   onNavigate: (href: string) => void;
   onOpenOutside: (href: string) => void;
+  muted?: boolean;
+  onAudible?: (audible: boolean) => void;
+  tabKey?: string;
 }) {
   const id = vref.id;
   const list = vref.list;
   const [meta, setMeta] = useState<OEmbed | null>(null);
   const [related, setRelated] = useState<VideoHit[]>([]);
+  const [playlistItems, setPlaylistItems] = useState<VideoHit[] | null>(null);
   const [note, setNote] = useState("");
   const [autoplay, setAutoplay] = useState(true);
   const [ended, setEnded] = useState(false);
@@ -273,12 +334,26 @@ function WatchLayout({
       setCount(6);
       setEnded(true);
     }
-  });
+  }, { key: tabKey, muted, onAudible });
+
+  // Tab-strip mute reaches the embedded player through the registry (the one
+  // surface WebFrame can't control). Re-applied when the player is recreated.
+  useEffect(() => {
+    const p = tabKey ? tubePlayers.get(tabKey) : undefined;
+    if (!p) return;
+    try {
+      if (muted) p.mute();
+      else p.unmute();
+    } catch {
+      /* player gone */
+    }
+  }, [muted, tabKey, id, list]);
 
   useEffect(() => {
     setEnded(false);
     setMeta(null);
     setRelated([]);
+    setPlaylistItems(null);
     setNote("");
   }, [id, list]);
 
@@ -295,18 +370,45 @@ function WatchLayout({
     if (!id || !meta?.title) return;
     const ac = new AbortController();
     setNote("finding similar videos…");
-    youtubeSearch(meta.title, ac.signal)
-      .then((found) => {
+    // The watch page's own related list first; a title search as the fallback.
+    const load = async () => {
+      try {
+        const rel = (await youtubeRelated(id, ac.signal)).filter((v) => v.id !== id);
         if (ac.signal.aborted) return;
-        const rest = found.filter((v) => v.id !== id);
-        setRelated(rest);
-        setNote(rest.length ? "" : "no similar videos came back");
-      })
-      .catch(() => {
+        if (rel.length) {
+          setRelated(rel);
+          setNote("");
+          return;
+        }
+      } catch (e) {
+        if (ac.signal.aborted) return;
+      }
+      try {
+        const alt = (await youtubeSearch(meta.title, ac.signal)).filter((v) => v.id !== id);
+        if (ac.signal.aborted) return;
+        setRelated(alt);
+        setNote(alt.length ? "" : "no similar videos came back");
+      } catch {
         if (!ac.signal.aborted) setNote("similar videos are unavailable right now.");
-      });
+      }
+    };
+    void load();
     return () => ac.abort();
   }, [id, meta?.title]);
+
+  // Playlist contents — the player already plays the list; this shows what's in it.
+  useEffect(() => {
+    if (!list) return;
+    const ac = new AbortController();
+    youtubePlaylist(list, ac.signal)
+      .then((items) => {
+        if (!ac.signal.aborted) setPlaylistItems(items);
+      })
+      .catch(() => {
+        /* the player still plays the list; the sidebar just stays hidden */
+      });
+    return () => ac.abort();
+  }, [list]);
 
   useEffect(() => {
     if (!ended) return;
@@ -407,7 +509,8 @@ function WatchLayout({
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[14.5px] text-ink2">
             {meta?.author && (
               <button
-                onClick={() => meta.authorUrl && onOpenOutside(meta.authorUrl)}
+                onClick={() => meta.authorUrl && onNavigate(meta.authorUrl)}
+                title="Open this channel in the tube desk"
                 className="underline decoration-dotted hover:text-ink"
               >
                 {meta.author}
@@ -424,7 +527,12 @@ function WatchLayout({
             </button>
             {id && (
               <button
-                onClick={() => navigator.clipboard?.writeText(watchUrl(id))}
+                onClick={() => {
+                  // Carry the current timestamp (if it's worth jumping to) so the
+                  // link opens where you were.
+                  const t = tabKey ? tubePlayers.get(tabKey)?.time?.() ?? 0 : 0;
+                  void navigator.clipboard?.writeText(watchUrl(id, t));
+                }}
                 className="hd-soft btn-sketch flex items-center gap-1 bg-paper2 px-2.5 py-1 text-[14px] text-ink2 hover:bg-cyan hover:text-[#12171f]"
               >
                 <Icon name="copy" size={12} /> copy link
@@ -435,6 +543,29 @@ function WatchLayout({
       </section>
 
       <aside className="min-w-0">
+        {list && playlistItems && playlistItems.length > 0 && (
+          <div className="mb-5">
+            <h2 className="mb-2 text-[23px] text-ink" style={HEAD}>
+              in this playlist <span className="text-[14px] italic text-ink3">({playlistItems.length})</span>
+            </h2>
+            <div className="no-scrollbar max-h-[320px] space-y-1 overflow-y-auto pr-1">
+              {playlistItems.map((v) => (
+                <button
+                  key={v.id + v.title}
+                  onClick={() => onNavigate(watchUrl(v.id))}
+                  className={["hd-soft flex w-full items-center gap-2 p-1 text-left", v.id === id ? "bg-yellow/40" : "hover:bg-paper3/60"].join(" ")}
+                  style={{ borderRadius: "10px 3px 12px 3px" }}
+                >
+                  <span className="relative shrink-0 overflow-hidden border border-ink/40" style={{ borderRadius: "8px 3px 8px 3px" }}>
+                    <img src={thumbUrl(v.id)} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-[42px] w-[75px] object-cover" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{v.title || "YouTube video"}</span>
+                  {v.id === id && <span className="shrink-0 text-[12px] italic text-ink2">playing</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[23px] text-ink" style={HEAD}>
             up next

@@ -44,8 +44,10 @@ export function parseVideo(raw: string): VideoRef | null {
   return { kind: "home" };
 }
 
-export function watchUrl(id: string) {
-  return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+export function watchUrl(id: string, t?: number) {
+  const base = `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+  // ponytail: only timestamps worth jumping to make it into the link.
+  return t && t > 30 ? `${base}&t=${Math.floor(t)}s` : base;
 }
 
 export function thumbUrl(id: string) {
@@ -76,7 +78,12 @@ export const YT_ERRORS: Record<number, string> = {
   153: "YouTube refused the embed from this app (player configuration error).",
 };
 
-export type YTPlayerInstance = { destroy: () => void };
+export type YTPlayerInstance = {
+  destroy: () => void;
+  mute: () => void;
+  unMute: () => void;
+  getCurrentTime: () => number;
+};
 type YTNamespace = {
   Player: new (el: HTMLElement, opts: Record<string, unknown>) => YTPlayerInstance;
   PlayerState: { ENDED: number };
@@ -153,6 +160,62 @@ async function listFrom(url: string, signal?: AbortSignal): Promise<VideoHit[]> 
 
 export function youtubeSearch(query: string, signal?: AbortSignal): Promise<VideoHit[]> {
   return listFrom(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, signal);
+}
+
+/** The watch page's own related videos — the real "up next", not a title search. */
+export function youtubeRelated(id: string, signal?: AbortSignal): Promise<VideoHit[]> {
+  return listFrom(watchUrl(id), signal);
+}
+
+/** A playlist's contents. */
+export function youtubePlaylist(list: string, signal?: AbortSignal): Promise<VideoHit[]> {
+  return listFrom(`https://www.youtube.com/playlist?list=${encodeURIComponent(list)}`, signal);
+}
+
+/* ---------------- resume position ---------------- */
+
+const POS_KEY = "quill.v1.ytpos";
+
+/** Remember where a video was paused. ponytail: flat localStorage map, 200 videos by recency. */
+export function saveWatchPos(id: string, t: number) {
+  if (!id || t < 5 || typeof localStorage === "undefined") return;
+  try {
+    const map = JSON.parse(localStorage.getItem(POS_KEY) || "{}") as Record<string, { t: number; at: number }>;
+    map[id] = { t: Math.floor(t), at: Date.now() };
+    const keys = Object.keys(map);
+    if (keys.length > 200) {
+      keys.sort((a, b) => map[a].at - map[b].at).slice(0, keys.length - 200).forEach((k) => delete map[k]);
+    }
+    localStorage.setItem(POS_KEY, JSON.stringify(map));
+  } catch {
+    /* storage full or blocked */
+  }
+}
+
+/** Where the video was last paused; 0 when there's nothing worth resuming. */
+export function loadWatchPos(id: string): number {
+  if (!id || typeof localStorage === "undefined") return 0;
+  try {
+    const e = (JSON.parse(localStorage.getItem(POS_KEY) || "{}") as Record<string, { t?: unknown }>)[id];
+    const t = typeof e?.t === "number" ? e.t : 0;
+    return t > 30 ? t : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Finished watching — don't resume this one next time. */
+export function clearWatchPos(id: string) {
+  if (!id || typeof localStorage === "undefined") return;
+  try {
+    const map = JSON.parse(localStorage.getItem(POS_KEY) || "{}") as Record<string, unknown>;
+    if (id in map) {
+      delete map[id];
+      localStorage.setItem(POS_KEY, JSON.stringify(map));
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 export function youtubeChannel(path: string, signal?: AbortSignal): Promise<VideoHit[]> {
