@@ -26,15 +26,33 @@ import { SearchBox } from "./SearchBox";
 import { isDesktop } from "../lib/platform";
 import { DeskModeSwitch, type DeskMode } from "./DeskHeader";
 import { WebFrame, type WebviewEl } from "./WebFrame";
+import { useLocal } from "../lib/store";
 
 const STARTERS = ["lofi hip hop", "nature documentary", "piano lessons", "css grid tutorial", "space telescope"];
 const YT_ENGINE = ENGINES.find((e) => e.id === "youtube") ?? ENGINES[0];
 const HEAD = { fontFamily: "var(--font-display)", fontWeight: 700 } as const;
 
-// Tube-desk audio: the IFrame player is the one thing the tab strip can't reach
-// through WebFrame, so each player registers its controls here, keyed by tab id.
+/** mm:ss for the loop labels. */
+const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** The three-click loop cycle: mark the start → mark the end → clear. */
+export function nextLoop(lp: { a: number; b?: number } | null, now: number): { a: number; b?: number } | null {
+  if (!lp) return { a: now };
+  if (lp.b === undefined) return { a: lp.a, b: Math.max(lp.a + 1, now) };
+  return null;
+}
+
+// Tube-desk player controls the tab strip and desk UI can call — the IFrame
+// player is the one surface WebFrame can't reach.
 // ponytail: module-level map, one entry per playing tab — fine at this scale.
-const tubePlayers = new Map<string, { mute: () => void; unmute: () => void; time: () => number }>();
+type TubePlayerCtl = {
+  mute: () => void;
+  unmute: () => void;
+  time: () => number;
+  setVolume: (v: number) => void;
+  pause: () => void;
+};
+const tubePlayers = new Map<string, TubePlayerCtl>();
 
 type Phase = "loading" | "ready" | "error" | "iframe";
 
@@ -48,6 +66,8 @@ interface PlayerAudio {
   onAudible?: (audible: boolean) => void;
   /** Fallback start position (a shared &t= link with no saved position). */
   startAt?: number;
+  /** A–B loop: jump back to `a` whenever playback reaches `b`. */
+  loop?: { a: number; b: number } | null;
 }
 
 /**
@@ -123,6 +143,8 @@ function useYouTubePlayer(id: string | undefined, list: string | undefined, onEn
             mute: () => { try { player?.mute(); } catch { /* gone */ } },
             unmute: () => { try { player?.unMute(); } catch { /* gone */ } },
             time: () => { try { return player ? Math.floor(player.getCurrentTime()) : 0; } catch { return 0; } },
+            setVolume: (v) => { try { player?.setVolume(v); } catch { /* gone */ } },
+            pause: () => { try { player?.pause(); } catch { /* gone */ } },
           });
         }
       })
@@ -142,9 +164,21 @@ function useYouTubePlayer(id: string | undefined, list: string | undefined, onEn
         }, 5000)
       : 0;
 
+    // A–B loop: jump back whenever playback crosses the end marker.
+    const loopTimer = window.setInterval(() => {
+      const lp = audioRef.current.loop;
+      if (!lp || !player) return;
+      try {
+        if (player.getCurrentTime() >= lp.b - 0.2) player.seekTo(lp.a, true);
+      } catch {
+        /* not ready */
+      }
+    }, 250);
+
     return () => {
       cancelled = true;
       if (posTimer) window.clearInterval(posTimer);
+      window.clearInterval(loopTimer);
       if (audioRef.current.key && tubePlayers.get(audioRef.current.key)) tubePlayers.delete(audioRef.current.key);
       try {
         player?.destroy();
@@ -193,6 +227,13 @@ export function TubeView({
   onAudible?: (audible: boolean) => void;
 }) {
   const vref: VideoRef = parseVideo(url) ?? { kind: "home" };
+  // Followed channels — a local subscription feed, no account, no tracking.
+  // ponytail: per-component state; another tab's tube layer goes stale until it
+  // remounts — fine at one-user scale.
+  const [follows, setFollows] = useLocal<{ name: string; path: string }[]>("tube.follows", []);
+  const [seenVids, setSeenVids] = useLocal<Record<string, string[]>>("tube.seen", {});
+  const toggleFollow = (f: { name: string; path: string }) =>
+    setFollows((p) => (p.some((x) => x.path === f.path) ? p.filter((x) => x.path !== f.path) : [f, ...p]));
 
   // Desktop: the original youtube.com page in a real webview.
   if (mode === "original" && isDesktop) {
@@ -283,7 +324,9 @@ export function TubeView({
           />
         </div>
 
-        {vref.kind === "home" && <TubeHome history={history} onSearch={onSearch} onNavigate={onNavigate} />}
+        {vref.kind === "home" && (
+          <TubeHome history={history} onSearch={onSearch} onNavigate={onNavigate} follows={follows} toggleFollow={toggleFollow} seenVids={seenVids} setSeenVids={setSeenVids} />
+        )}
         {(vref.kind === "watch" || vref.kind === "shorts" || vref.kind === "playlist") && (
           <WatchLayout vref={vref} onNavigate={onNavigate} onOpenOutside={onOpenOutside} muted={muted} onAudible={onAudible} tabKey={webviewKey} />
         )}
@@ -294,6 +337,8 @@ export function TubeView({
             channelPath={vref.channelPath}
             onNavigate={onNavigate}
             onOpenOutside={onOpenOutside}
+            follows={follows}
+            toggleFollow={toggleFollow}
           />
         )}
       </div>
@@ -325,6 +370,10 @@ function WatchLayout({
   const [autoplay, setAutoplay] = useState(true);
   const [ended, setEnded] = useState(false);
   const [count, setCount] = useState(6);
+  // A–B loop: first click marks the start, second the end, third clears.
+  const [loop, setLoop] = useState<{ a: number; b?: number } | null>(null);
+  // Sleep timer: when to pause (timestamp); volume fades over the final minute.
+  const [sleepAt, setSleepAt] = useState<number | null>(null);
   const relatedRef = useRef<VideoHit[]>([]);
   const autoRef = useRef(true);
   const navRef = useRef(onNavigate);
@@ -337,7 +386,27 @@ function WatchLayout({
       setCount(6);
       setEnded(true);
     }
-  }, { key: tabKey, muted, onAudible, startAt: vref.t });
+  }, { key: tabKey, muted, onAudible, startAt: vref.t, loop: loop && loop.b !== undefined ? { a: loop.a, b: loop.b } : null });
+
+  // Sleep timer: fade the volume across the last minute, then pause. Runs even
+  // when the tab is in a keep-alive layer — the registry finds the player.
+  useEffect(() => {
+    if (!sleepAt) return;
+    const tick = window.setInterval(() => {
+      const p = tabKey ? tubePlayers.get(tabKey) : undefined;
+      const left = sleepAt - Date.now();
+      if (left <= 0) {
+        setSleepAt(null);
+        try { p?.pause(); } catch { /* gone */ }
+        window.setTimeout(() => {
+          try { p?.setVolume(100); } catch { /* gone */ }
+        }, 2000);
+      } else if (left < 60000 && p) {
+        try { p.setVolume(Math.max(0, Math.round((left / 60000) * 100))); } catch { /* gone */ }
+      }
+    }, 5000);
+    return () => window.clearInterval(tick);
+  }, [sleepAt, tabKey]);
 
   // Tab-strip mute reaches the embedded player through the registry (the one
   // surface WebFrame can't control). Re-applied when the player is recreated.
@@ -358,6 +427,8 @@ function WatchLayout({
     setRelated([]);
     setPlaylistItems(null);
     setNote("");
+    setLoop(null);
+    setSleepAt(null);
   }, [id, list]);
 
   useEffect(() => {
@@ -528,6 +599,32 @@ function WatchLayout({
             >
               autoplay next: {autoplay ? "on" : "off"}
             </button>
+            <button
+              onClick={() => {
+                const now = tabKey ? tubePlayers.get(tabKey)?.time?.() ?? 0 : 0;
+                setLoop((lp) => nextLoop(lp, now));
+              }}
+              title="Loop a segment: click to mark the start, again for the end, again to clear"
+              className={["hd-soft btn-sketch px-2.5 py-1 text-[14px]", loop ? "bg-pink/30 font-bold text-ink" : "bg-paper2 text-ink2"].join(" ")}
+            >
+              loop:{" "}
+              {!loop
+                ? "set start"
+                : loop.b === undefined
+                  ? "set end"
+                  : `${fmt(loop.a)}–${fmt(loop.b)} · clear`}
+            </button>
+            <button
+              onClick={() => setSleepAt((s) => (s ? null : Date.now() + 30 * 60000))}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setSleepAt((s) => (s ? null : Date.now() + 60 * 60000));
+              }}
+              title="Sleep timer: click for 30 minutes, right-click for 60 — fades out and pauses. Click again to cancel."
+              className={["hd-soft btn-sketch px-2.5 py-1 text-[14px]", sleepAt ? "bg-violet/30 font-bold text-ink" : "bg-paper2 text-ink2"].join(" ")}
+            >
+              sleep: {sleepAt ? `${Math.max(1, Math.round((sleepAt - Date.now()) / 60000))} min left` : "30 min"}
+            </button>
             {id && (
               <button
                 onClick={() => {
@@ -593,12 +690,16 @@ function ResultsGrid({
   channelPath,
   onNavigate,
   onOpenOutside,
+  follows,
+  toggleFollow,
 }: {
   kind: "search" | "channel";
   query?: string;
   channelPath?: string;
   onNavigate: (href: string) => void;
   onOpenOutside: (href: string) => void;
+  follows: { name: string; path: string }[];
+  toggleFollow: (f: { name: string; path: string }) => void;
 }) {
   const [hits, setHits] = useState<VideoHit[] | null>(null);
   const [err, setErr] = useState("");
@@ -635,11 +736,22 @@ function ResultsGrid({
   }
 
   const title = kind === "channel" ? `uploads · ${(channelPath || "").replace("/", "")}` : `results for “${query}”`;
+  const cname = (channelPath || "").split("/").filter(Boolean).pop() || "channel";
+  const followed = kind === "channel" && channelPath && follows.some((x) => x.path === channelPath);
 
   return (
     <section>
-      <h2 className="mb-3 break-words text-[24px] text-ink [overflow-wrap:anywhere]" style={HEAD}>
+      <h2 className="mb-3 flex flex-wrap items-baseline gap-3 break-words text-[24px] text-ink [overflow-wrap:anywhere]" style={HEAD}>
         {title}
+        {kind === "channel" && channelPath && (
+          <button
+            onClick={() => toggleFollow({ name: cname, path: channelPath })}
+            title={followed ? "Unfollow — drops this channel from the tube home feed" : "Follow — latest uploads show on the tube home, no account needed"}
+            className={["hd-soft btn-sketch px-2.5 py-0.5 text-[14px]", followed ? "bg-pink/30 font-bold text-ink" : "bg-paper2 text-ink2 hover:bg-yellow hover:text-[#1a2440]"].join(" ")}
+          >
+            {followed ? "following ✓" : "+ follow"}
+          </button>
+        )}
       </h2>
       {busy && <p className="text-[16px] italic text-ink2">reading YouTube's own results page through a relay…</p>}
       {err && (
@@ -674,10 +786,18 @@ function TubeHome({
   history,
   onSearch,
   onNavigate,
+  follows,
+  toggleFollow,
+  seenVids,
+  setSeenVids,
 }: {
   history: HistoryEntry[];
   onSearch: (q: string) => void;
   onNavigate: (href: string) => void;
+  follows: { name: string; path: string }[];
+  toggleFollow: (f: { name: string; path: string }) => void;
+  seenVids: Record<string, string[]>;
+  setSeenVids: (f: (p: Record<string, string[]>) => Record<string, string[]>) => void;
 }) {
   const recent = useMemo(() => {
     const seen = new Set<string>();
@@ -711,6 +831,14 @@ function TubeHome({
           ))}
         </div>
       </div>
+      {follows.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-[24px] text-ink" style={HEAD}>
+            your channels <span className="text-[14px] italic text-ink3">— new uploads dot pink</span>
+          </h2>
+          <FollowFeed follows={follows} toggleFollow={toggleFollow} seenVids={seenVids} setSeenVids={setSeenVids} onNavigate={onNavigate} />
+        </section>
+      )}
       {recent.length > 0 && (
         <section>
           <h2 className="mb-3 text-[24px] text-ink" style={HEAD}>
@@ -727,6 +855,90 @@ function TubeHome({
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/** Latest uploads for the followed channels — a local subscription feed. */
+function FollowFeed({
+  follows,
+  toggleFollow,
+  seenVids,
+  setSeenVids,
+  onNavigate,
+}: {
+  follows: { name: string; path: string }[];
+  toggleFollow: (f: { name: string; path: string }) => void;
+  seenVids: Record<string, string[]>;
+  setSeenVids: (f: (p: Record<string, string[]>) => Record<string, string[]>) => void;
+  onNavigate: (href: string) => void;
+}) {
+  const [feeds, setFeeds] = useState<{ path: string; items: { v: VideoHit; fresh: boolean }[] }[]>([]);
+  // Fresh-dots are computed against what was known when the feed loaded, so
+  // marking them seen (for next time) doesn't erase them on this visit.
+  const seenRef = useRef(seenVids);
+  seenRef.current = seenVids;
+
+  useEffect(() => {
+    if (!follows.length) {
+      setFeeds([]);
+      return;
+    }
+    const ac = new AbortController();
+    for (const f of follows) {
+      youtubeChannel(f.path, ac.signal)
+        .then((items) => {
+          if (ac.signal.aborted) return;
+          const known = seenRef.current[f.path] ?? [];
+          const top = items.slice(0, 3).map((v) => ({ v, fresh: !known.includes(v.id) }));
+          setFeeds((prev) => [...prev.filter((x) => x.path !== f.path), { path: f.path, items: top }]);
+          // Remember what was shown; the next tube-home visit dots only newer ones.
+          setSeenVids((prev) => ({ ...prev, [f.path]: items.slice(0, 6).map((v) => v.id) }));
+        })
+        .catch(() => {
+          /* one channel failing must not kill the feed */
+        });
+    }
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [follows]);
+
+  return (
+    <div className="space-y-3">
+      {follows.map((f) => {
+        const feed = feeds.find((x) => x.path === f.path);
+        return (
+          <div key={f.path} className="hd relative bg-paper2 p-3 ink-shadow">
+            <button onClick={() => toggleFollow(f)} className="absolute right-2 top-2 z-10 text-ink3 transition hover:text-red" title="Unfollow this channel">
+              <Icon name="close" size={12} strokeWidth={2.6} />
+            </button>
+            <p className="mb-2 truncate pr-6 text-[18px] text-ink" style={HEAD}>
+              {f.name}
+            </p>
+            {!feed && <p className="text-[14px] italic text-ink3">reading the channel…</p>}
+            {feed && feed.items.length === 0 && <p className="text-[14px] italic text-ink3">nothing readable came back.</p>}
+            {feed && feed.items.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
+                {feed.items.map(({ v, fresh }) => (
+                  <button onClick={() => onNavigate(watchUrl(v.id))} className="group relative min-w-0 text-left" title={v.title}>
+                    <span className="relative block overflow-hidden border-2 border-ink bg-paper3" style={{ borderRadius: "10px 3px 12px 3px" }}>
+                      <img
+                        src={thumbUrl(v.id)}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="aspect-video w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                      />
+                      {fresh && <span className="absolute right-1.5 top-1.5 h-3 w-3 rounded-full border border-ink bg-pink" title="new since you last looked" />}
+                    </span>
+                    <span className="mt-1 line-clamp-2 block text-[13.5px] leading-snug text-ink2 group-hover:underline">{v.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

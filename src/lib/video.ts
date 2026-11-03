@@ -97,6 +97,9 @@ export type YTPlayerInstance = {
   mute: () => void;
   unMute: () => void;
   getCurrentTime: () => number;
+  setVolume: (v: number) => void;
+  pause: () => void;
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
 };
 type YTNamespace = {
   Player: new (el: HTMLElement, opts: Record<string, unknown>) => YTPlayerInstance;
