@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "./Icons";
 import { CAT_LABEL, CAT_COLOR, RULE_COUNT, type Category } from "../lib/filters";
 import { TOGGLES, type Settings } from "../lib/settings";
@@ -55,6 +55,13 @@ export function PrivacyPanel({
   onRestore?: (file: File) => void;
 }) {
   const [confirm, setConfirm] = useState<string | null>(null);
+  // Erase buttons stay armed for 3s only — a stale "tap again" state must not
+  // destroy data without a fresh double-tap.
+  useEffect(() => {
+    if (!confirm) return;
+    const t = window.setTimeout(() => setConfirm(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [confirm]);
   const maxCat = Math.max(1, ...Object.values(byCat));
   const host = tab.url.startsWith("quill://") ? "" : hostOf(tab.url);
   const audited = tab.article?.scanned ?? tab.blocked.length;

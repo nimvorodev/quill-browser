@@ -278,6 +278,13 @@ export function SettingsPanel({
   onWipe: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
+  // The burn button stays armed for 3s only — a stale "tap once more" state
+  // must not destroy the notebook without a fresh double-tap.
+  useEffect(() => {
+    if (!confirm) return;
+    const t = window.setTimeout(() => setConfirm(false), 3000);
+    return () => window.clearTimeout(t);
+  }, [confirm]);
   return (
     <div className="space-y-5 p-3">
       <section>
@@ -407,6 +414,9 @@ const KEYS: [string, string][] = [
   ["Ctrl/⌘ + T", "new tab"],
   ["Ctrl/⌘ + W", "close tab"],
   ["Ctrl/⌘ + L", "jump to the address bar"],
+  ["Ctrl/⌘ + F", "find in this page"],
+  ["Ctrl/⌘ + P", "save this page as PDF"],
+  ["right-click a tab", "tab menu — close others / site, duplicate, mute"],
   ["Ctrl/⌘ + J", "toggle the AI margin"],
   ["Ctrl/⌘ + D", "bookmark this page"],
   ["Ctrl/⌘ + B", "bookmarks drawer"],
