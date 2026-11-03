@@ -34,6 +34,7 @@ import {
   uid,
   useLocal,
   wipeStorage,
+  burstTripped,
   computeKeepAlive,
   NOTE_DEFAULT_H,
   NOTE_DEFAULT_W,
@@ -173,6 +174,8 @@ export default function App() {
   const [later, setLater] = useLocal<LaterItem[]>("later", []);
   /** Hosts the user switched to "direct frame" — they open live from now on. */
   const [siteViews, setSiteViews] = useLocal<Record<string, "live">>("siteviews", {});
+  /** Hosts where every pop-up dies — for stream sites whose ads rotate past every heuristic. */
+  const [popupHosts, setPopupHosts] = useLocal<Record<string, true>>("popupblock", {});
   /** Per-tab desk mode for GitHub / YouTube: Quill's desk, or the original site in a webview (desktop). */
   const [deskModes, setDeskModes] = useState<Record<string, DeskMode>>({});
 
@@ -363,14 +366,14 @@ export default function App() {
   }, [tab, toast]);
   /* ---------------- backup / restore ---------------- */
   const exportBackup = useCallback(() => {
-    const payload = { v: 1 as const, at: Date.now(), settings, history, bookmarks, notes, later };
+    const payload = { v: 1 as const, at: Date.now(), settings, history, bookmarks, notes, later, siteViews, popupHosts };
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
     a.download = `quill-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast("backup saved to Downloads", "var(--lime)", "download");
-  }, [settings, history, bookmarks, notes, later, toast]);
+  }, [settings, history, bookmarks, notes, later, siteViews, popupHosts, toast]);
   const importBackup = useCallback(
     async (file: File) => {
       const b = parseBackup(await file.text());
@@ -382,10 +385,12 @@ export default function App() {
         );
       if (b.bookmarks) setBookmarks((bs) => [...b.bookmarks!, ...bs.filter((x) => !b.bookmarks!.some((y) => y.url === x.url))]);
       if (b.later) setLater((q) => [...b.later!, ...q.filter((x) => !b.later!.some((y) => y.url === x.url))].slice(0, 200));
+      if (b.siteViews) setSiteViews((p) => ({ ...b.siteViews!, ...p }));
+      if (b.popupHosts) setPopupHosts((p) => ({ ...b.popupHosts!, ...p }));
       if (b.notes) setNotes((ns) => [...b.notes!, ...ns.filter((x) => !b.notes!.some((y) => y.id === x.id))]);
       toast("backup restored", "var(--lime)", "check");
     },
-    [setSettings, setHistory, setBookmarks, setNotes, setLater, toast],
+    [setSettings, setHistory, setBookmarks, setNotes, setLater, setSiteViews, setPopupHosts, toast],
   );
 
   const addBlocked = useCallback(
@@ -686,6 +691,20 @@ export default function App() {
       else if (action === "duplicate") duplicateTab(id);
       else if (action === "pin") patch(id, (x) => ({ ...x, pinned: !x.pinned }));
       else if (action === "mute") patch(id, (x) => ({ ...x, muted: !x.muted }));
+      else if (action === "popups") {
+        const host = hostOf(t.url);
+        setPopupHosts((p) => {
+          const next = { ...p };
+          if (host in next) {
+            delete next[host];
+            toast(`pop-ups allowed again on ${host}`, "var(--green)", "shield");
+          } else {
+            next[host] = true;
+            toast(`pop-ups blocked on ${host}`, "var(--red)", "shieldOff");
+          }
+          return next;
+        });
+      }
       else if (action === "close") closeTab(id);
       else if (action === "close-others") cullTabs((x) => x.id === id, id);
       else if (action === "close-right") {
@@ -770,7 +789,7 @@ export default function App() {
       // make you flip the switch on every visit. Picking "direct frame" sticks
       // for the host; picking shielded/interactive clears it. Reader/split leave it alone.
       const host = hostOf(tab.url);
-      if (view === "original" && sub === "live" && !selfRenders(tab.url)) {
+      if (view === "original" && sub === "live" && !selfRenders(tab.url) && siteViews[host] !== "live") {
         setSiteViews((p) => (p[host] === "live" ? p : { ...p, [host]: "live" }));
         toast("this site now opens as the direct frame", "var(--cyan)", "antenna");
       } else if (view === "original" && sub !== "live" && host) {
@@ -869,7 +888,9 @@ export default function App() {
   }, []);
   // Desktop: native menu accelerators and popups from web content.
   const cmdRef = useRef<(cmd: string) => void>(() => {});
-  const openUrlRef = useRef<(url: string) => void>(() => {});
+  const openUrlRef = useRef<(info: { url: string; from: string }) => void>(() => {});
+  /** Recent pop-up timestamps per host — feeds the burst auto-block. */
+  const burstRef = useRef<Record<string, number[]>>({});
   useEffect(() => {
     if (!desktop) return;
     const offCmd = desktop.onCommand((c) => cmdRef.current(c));
@@ -887,8 +908,37 @@ export default function App() {
     else if (cmd === "find") setFindOpen(true);
     else if (cmd === "save-pdf") void savePdf();
   };
-  openUrlRef.current = (url) => {
-    if (/^https?:\/\//i.test(url)) openNew(url);
+  openUrlRef.current = ({ url, from }) => {
+    // Pop-ups (window.open / target=_blank from web content) expect a real
+    // top-level window, not a sandboxed shielded copy — open them as the
+    // direct frame so they don't die on sandbox/frame rules.
+    if (/^https?:\/\//i.test(url)) {
+      // Per-site popup block: stream sites open a fresh rotating ad URL on
+      // every click — no gesture or blocklist heuristic can tell those from
+      // real links, so the user decides per site (tab menu).
+      if (from) {
+        const host = hostOf(from);
+        if (popupHosts[host]) {
+          toast(`pop-up blocked on ${host}`, "var(--red)", "shieldOff");
+          return;
+        }
+        // Burst auto-block: 4+ pop-ups inside 5s from one site is ad-storm
+        // behavior. Search engines are exempt — ctrl+clicking results is a
+        // legitimate burst. The tab menu un-blocks.
+        if (!isSearchSiteUrl(from)) {
+          const now = Date.now();
+          const times = (burstRef.current[host] || []).filter((t) => now - t < 5000);
+          times.push(now);
+          burstRef.current[host] = times;
+          if (burstTripped(times, now)) {
+            setPopupHosts((p) => (host in p ? p : { ...p, [host]: true }));
+            toast(`pop-ups auto-blocked on ${host} — right-click the tab to allow again`, "var(--red)", "shieldOff");
+            return;
+          }
+        }
+      }
+      openNew(url, "live");
+    }
   };
 
   keyRef.current = (e: KeyboardEvent) => {
@@ -1315,6 +1365,7 @@ export default function App() {
           onPin={(id) => patch(id, (t) => ({ ...t, pinned: !t.pinned }))}
           onMute={(id) => patch(id, (t) => ({ ...t, muted: !t.muted }))}
           onMenuAction={onTabMenu}
+          popupHosts={popupHosts}
           onReorder={(from, to) =>
             setTabs((ts) => {
               const next = [...ts];

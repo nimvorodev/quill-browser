@@ -122,6 +122,24 @@ const YT_NOADS = `(function () {
   }
 })();`;
 
+// Chromium's own popup-blocker rule, ported into a scriptlet: window.open is
+// only honoured while a real user gesture is active. Ad popunders fire on
+// timers/scroll/page-load/synthetic clicks — no activation — so they die in
+// the page instead of becoming tabs. The main-process ad-host filter stays as
+// the second layer for gesture popups on known ad domains.
+const POPUP_GATE = `(function () {
+  if (window.__quillPopupGate) return;
+  window.__quillPopupGate = 1;
+  var oo = window.open;
+  if (!oo) return;
+  try {
+    window.open = function (url, name, feat) {
+      if (!(navigator.userActivation && navigator.userActivation.isActive)) return null;
+      return oo.call(window, url, name, feat);
+    };
+  } catch (e) {}
+})();`;
+
 /* ---------------- downloads ---------------- */
 
 /** Wire real downloads for a session: save into the user's Downloads folder, stream progress to the renderer. */
@@ -248,8 +266,29 @@ function createWindow() {
   });
   win.webContents.on("did-attach-webview", (_e, wc) => {
     wc.setWindowOpenHandler(({ url }) => {
-      // Popups from web content open as a new Quill tab in the renderer.
-      if (/^https?:\/\//i.test(url)) win?.webContents.send("quill:open-url", url);
+      // The popup blocker for webviews: pop-ups from web content become a new
+      // Quill tab — unless the URL is an ad, in which case it dies here
+      // instead of opening an ad page as a tab.
+      if (/^https?:\/\//i.test(url)) {
+        let ad = false;
+        try {
+          ad = hostBlocked(new URL(url).hostname) || AD_PATHS.some((re) => re.test(url)) || YT_AD.test(url);
+        } catch {
+          /* unparseable — treat as not-ad */
+        }
+        if (ad) {
+          blockedCount += 1;
+          let h = "";
+          try {
+            h = new URL(url).hostname;
+          } catch {
+            /* ignore */
+          }
+          win?.webContents.send("quill:blocked", { url, host: h });
+          return { action: "deny" };
+        }
+        win?.webContents.send("quill:open-url", { url, from: wc.getURL() });
+      }
       return { action: "deny" };
     });
     wc.on("will-navigate", (e, url) => {
@@ -271,12 +310,13 @@ function createWindow() {
         return false;
       }
     };
-    // The scriptlet is idempotent (window.__quillNoAds): did-navigate injects it
-    // before page scripts fetch the player data, dom-ready catches the first load.
-    const noAds = (u) => {
+    // The scriptlets are idempotent (window flags): did-navigate injects them
+    // before page scripts run, dom-ready catches the first load.
+    const runScriptlets = (u) => {
+      void wc.executeJavaScript(POPUP_GATE, true).catch(() => {});
       if (isYouTubePage(u)) void wc.executeJavaScript(YT_NOADS, true).catch(() => {});
     };
-    wc.on("did-navigate", (_ev, url) => noAds(url));
+    wc.on("did-navigate", (_ev, url) => runScriptlets(url));
     // Real YouTube pages: strip ad placements from the player API's parsed JSON.
     wc.on("dom-ready", () => {
       try {
@@ -284,7 +324,7 @@ function createWindow() {
         // Backup title push: covers cases page-title-updated misses.
         const t = wc.getTitle();
         if (url && t) win?.webContents.send("quill:frame-title", { url, title: String(t).slice(0, 90) });
-        noAds(url);
+        runScriptlets(url);
       } catch {
         /* not a page we care about */
       }

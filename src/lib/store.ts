@@ -143,6 +143,16 @@ export function useNow(interval = 30000) {
 }
 
 /**
+ * Burst auto-block rule: a host that opened `need` pop-ups within `windowMs`
+ * is showing ad-storm behavior. Search engines are exempt upstream —
+ * ctrl+clicking results is a legitimate burst. ponytail: threshold and window
+ * are judgment calls; 4-in-5s stays clear of human link-clicking speed.
+ */
+export function burstTripped(times: number[], now: number, need = 4, windowMs = 5000): boolean {
+  return times.filter((t) => now - t >= 0 && now - t < windowMs).length >= need;
+}
+
+/**
  * Which tabs keep their live webview mounted in a background layer so media
  * keeps playing across tab switches. Efficiency-first rule: a background tab
  * keeps its layer ONLY while it is actually audible — idle tabs give their

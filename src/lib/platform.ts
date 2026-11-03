@@ -50,8 +50,8 @@ export interface DesktopBridge {
   partition: string;
   /** Native menu accelerators ("new-tab", "close-tab", "reload", "palette"). */
   onCommand(cb: (cmd: string) => void): () => void;
-  /** Popups opened by web content; the app opens them as a new tab. */
-  onOpenUrl(cb: (url: string) => void): () => void;
+  /** Popups opened by web content — url is the popup, from is the page that opened it. */
+  onOpenUrl(cb: (info: { url: string; from: string }) => void): () => void;
 }
 
 declare global {

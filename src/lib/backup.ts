@@ -12,6 +12,10 @@ export interface Backup {
   bookmarks?: Bookmark[];
   notes?: Note[];
   later?: LaterItem[];
+  /** Hosts pinned to the direct frame. */
+  siteViews?: Record<string, "live">;
+  /** Hosts with pop-ups blocked. */
+  popupHosts?: Record<string, true>;
 }
 
 const str = (v: unknown, max = 200) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -70,6 +74,20 @@ export function parseBackup(raw: string): Backup | null {
       .map((x) => ({ url: str(x.url, 2048), title: str(x.title, 200), at: num(x.at) }));
     if (list.length) out.later = list.slice(0, 200);
   }
+
+  // Per-site preferences: host-keyed maps with fixed values.
+  const pickHostMap = (raw: unknown, val: "live" | true) => {
+    if (typeof raw !== "object" || raw === null) return null;
+    const picked: Record<string, "live" | true> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (/^[a-z0-9.-]{1,253}$/i.test(k) && v === val) picked[k.toLowerCase()] = val;
+    }
+    return Object.keys(picked).length ? picked : null;
+  };
+  const views = pickHostMap(b.siteViews, "live");
+  if (views) out.siteViews = views as Record<string, "live">;
+  const pops = pickHostMap(b.popupHosts, true);
+  if (pops) out.popupHosts = pops as Record<string, true>;
 
   if (Array.isArray(b.notes)) {
     const list = b.notes

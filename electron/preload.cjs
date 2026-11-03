@@ -37,5 +37,7 @@ contextBridge.exposeInMainWorld("quill", {
 
   /** Menu accelerators & popups from web content arrive here. */
   onCommand: on("quill:cmd", (v) => String(v || "")),
-  onOpenUrl: on("quill:open-url", (v) => String(v || "")),
+  onOpenUrl: on("quill:open-url", (v) =>
+    typeof v === "object" && v !== null ? { url: String(v.url || ""), from: String(v.from || "") } : { url: String(v || ""), from: "" },
+  ),
 });

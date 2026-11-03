@@ -6,7 +6,7 @@ import { desktop, isDesktop, isMac } from "../lib/platform";
 
 const TAB_COLORS = ["var(--yellow)", "var(--pink)", "var(--cyan)", "var(--lime)", "var(--orange)", "var(--violet)"];
 
-export type TabMenuAction = "reload" | "duplicate" | "pin" | "mute" | "close" | "close-others" | "close-right" | "close-site";
+export type TabMenuAction = "reload" | "duplicate" | "pin" | "mute" | "close" | "close-others" | "close-right" | "close-site" | "popups";
 
 /**
  * Tab strip. Tabs shrink to share the row (like Chrome/Brave) instead of
@@ -27,6 +27,7 @@ export function TabStrip({
   onFocusMode,
   onMute,
   onMenuAction,
+  popupHosts,
 }: {
   tabs: Tab[];
   activeId: string;
@@ -40,6 +41,8 @@ export function TabStrip({
   onFocusMode: () => void;
   onMute?: (id: string) => void;
   onMenuAction?: (action: TabMenuAction, id: string) => void;
+  /** Hosts with pop-ups blocked — drives the tab menu label. */
+  popupHosts?: Record<string, true>;
 }) {
   const [drag, setDrag] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -248,6 +251,7 @@ export function TabStrip({
           { key: "duplicate", label: "Duplicate", icon: "copy" },
           { key: "pin", label: t.pinned ? "Unpin tab" : "Pin tab", icon: "pin" },
           { key: "mute", label: t.muted ? "Unmute tab" : "Mute tab", icon: t.muted ? "speaker" : "speakerOff" },
+          { key: "popups", label: popupHosts?.[hostOf(t.url)] ? "Allow pop-ups on this site" : "Block pop-ups on this site", icon: "shieldOff" },
           { key: "close", label: "Close tab", icon: "close", sep: true, danger: true },
           { key: "close-others", label: "Close other tabs", icon: "filter", danger: true },
           { key: "close-right", label: "Close tabs to the right", icon: "forward", danger: true },
