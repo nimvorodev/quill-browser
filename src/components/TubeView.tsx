@@ -374,6 +374,7 @@ function WatchLayout({
   const [loop, setLoop] = useState<{ a: number; b?: number } | null>(null);
   // Sleep timer: when to pause (timestamp); volume fades over the final minute.
   const [sleepAt, setSleepAt] = useState<number | null>(null);
+  const [sleepLeft, setSleepLeft] = useState(0);
   const relatedRef = useRef<VideoHit[]>([]);
   const autoRef = useRef(true);
   const navRef = useRef(onNavigate);
@@ -390,11 +391,13 @@ function WatchLayout({
 
   // Sleep timer: fade the volume across the last minute, then pause. Runs even
   // when the tab is in a keep-alive layer — the registry finds the player.
+  // Spans videos: navigating to the next one keeps the timer running.
   useEffect(() => {
     if (!sleepAt) return;
     const tick = window.setInterval(() => {
       const p = tabKey ? tubePlayers.get(tabKey) : undefined;
       const left = sleepAt - Date.now();
+      setSleepLeft(Math.max(1, Math.round(left / 60000)));
       if (left <= 0) {
         setSleepAt(null);
         try { p?.pause(); } catch { /* gone */ }
@@ -428,7 +431,8 @@ function WatchLayout({
     setPlaylistItems(null);
     setNote("");
     setLoop(null);
-    setSleepAt(null);
+    // NB: the sleep timer is deliberately NOT reset here — it spans videos.
+    // Falling asleep to a playlist is the whole point.
   }, [id, list]);
 
   useEffect(() => {
@@ -615,15 +619,29 @@ function WatchLayout({
                   : `${fmt(loop.a)}–${fmt(loop.b)} · clear`}
             </button>
             <button
-              onClick={() => setSleepAt((s) => (s ? null : Date.now() + 30 * 60000))}
+              onClick={() => {
+                if (sleepAt) {
+                  setSleepAt(null);
+                  setSleepLeft(0);
+                } else {
+                  setSleepAt(Date.now() + 30 * 60000);
+                  setSleepLeft(30);
+                }
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
-                setSleepAt((s) => (s ? null : Date.now() + 60 * 60000));
+                if (sleepAt) {
+                  setSleepAt(null);
+                  setSleepLeft(0);
+                } else {
+                  setSleepAt(Date.now() + 60 * 60000);
+                  setSleepLeft(60);
+                }
               }}
               title="Sleep timer: click for 30 minutes, right-click for 60 — fades out and pauses. Click again to cancel."
               className={["hd-soft btn-sketch px-2.5 py-1 text-[14px]", sleepAt ? "bg-violet/30 font-bold text-ink" : "bg-paper2 text-ink2"].join(" ")}
             >
-              sleep: {sleepAt ? `${Math.max(1, Math.round((sleepAt - Date.now()) / 60000))} min left` : "30 min"}
+              sleep: {sleepAt ? `${sleepLeft} min left` : "30 min"}
             </button>
             {id && (
               <button
