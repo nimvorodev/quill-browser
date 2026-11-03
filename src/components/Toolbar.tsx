@@ -71,7 +71,9 @@ export function Toolbar({
 }) {
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
-  const [hi, setHi] = useState(0);
+  // -1 = no suggestion selected: Enter submits the raw input (a search).
+  // Anything else hijacks the keystroke into the first URL suggestion.
+  const [hi, setHi] = useState(-1);
   const [menu, setMenu] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -105,7 +107,7 @@ export function Toolbar({
     return () => document.removeEventListener("mousedown", away);
   }, []);
 
-  useEffect(() => setHi(0), [input]);
+  useEffect(() => setHi(-1), [input]);
 
   const sugs = useMemo<Sug[]>(() => {
     const q = input.trim().toLowerCase();
@@ -234,10 +236,10 @@ export function Toolbar({
                 setHi((h) => Math.min(h + 1, sugs.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
-                setHi((h) => Math.max(h - 1, 0));
+                setHi((h) => Math.max(h - 1, -1));
               } else if (e.key === "Enter") {
                 e.preventDefault();
-                if (open && sugs[hi]) pick(sugs[hi]);
+                if (open && hi >= 0 && sugs[hi]) pick(sugs[hi]);
                 else {
                   setOpen(false);
                   inputRef.current?.blur();
