@@ -74,12 +74,17 @@ export async function streamChat(
 ): Promise<string> {
   if (cfg.provider === "scribe") {
     const out = scribe(msgs);
+    let shown = "";
     for (let i = 0; i < out.length; i += 4) {
-      if (signal?.aborted) break;
-      onToken(out.slice(i, i + 4));
+      // Abort must leave only what was actually streamed — the caller saves
+      // the return value as the final message.
+      if (signal?.aborted) return shown;
+      const piece = out.slice(i, i + 4);
+      shown += piece;
+      onToken(piece);
       await new Promise((r) => setTimeout(r, 12));
     }
-    return out;
+    return shown;
   }
 
   const base = cfg.baseUrl.replace(/\/+$/, "");
