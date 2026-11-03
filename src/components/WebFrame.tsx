@@ -60,46 +60,49 @@ export function WebFrame(p: WebFrameProps) {
 function DesktopView(p: WebFrameProps) {
   const ref = useRef<WebviewEl | null>(null);
   const lastUrl = useRef(p.url);
-  // dom-ready can re-fire (reloads) long after mount; keep mute fresh through a ref.
-  const mutedRef = useRef(p.muted === true);
-  mutedRef.current = p.muted === true;
+  // Listeners are wired once per element (mount effect below), but handlers
+  // and zoom/mute change every render — they must read the LATEST props or
+  // the webview keeps mount-time values (zoom reset on reload, ghost toggled
+  // after mount ignored, mute out of sync).
+  const propsRef = useRef(p);
+  propsRef.current = p;
 
   // Mount: wire events once per element.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const onTitle = (e: Event) => p.onTitle((e as unknown as { title: string }).title || "");
+    const onTitle = (e: Event) => propsRef.current.onTitle((e as unknown as { title: string }).title || "");
     const onNav = (e: Event) => {
       const u = (e as unknown as { url: string }).url;
       if (u && u !== lastUrl.current) {
         lastUrl.current = u;
-        p.onNavigate?.(u);
+        propsRef.current.onNavigate?.(u);
       }
     };
     const onStop = () => {
-      p.onLoaded?.();
+      propsRef.current.onLoaded?.();
       try {
-        el.setZoomFactor(p.zoom / 100);
+        el.setZoomFactor(propsRef.current.zoom / 100);
       } catch {
         /* not ready */
       }
     };
     const onReady = () => {
       try {
-        el.setZoomFactor(p.zoom / 100);
-        el.setAudioMuted(mutedRef.current);
+        el.setZoomFactor(propsRef.current.zoom / 100);
+        el.setAudioMuted(propsRef.current.muted === true);
       } catch {
         /* not ready */
       }
     };
     const onFound = (e: Event) => {
       const d = e as unknown as { activeMatchOrdinal: number; matches: number };
-      p.onFoundInPage?.({ active: d.activeMatchOrdinal, matches: d.matches });
+      propsRef.current.onFoundInPage?.({ active: d.activeMatchOrdinal, matches: d.matches });
     };
     // ponytail: any media element flipping play/pause moves the flag — a page
     // with two players can briefly misreport. isCurrentlyAudible polling is
     // the upgrade path if that ever bites.
-    const onMedia = (e: Event) => p.onAudible?.(e.type === "media-started-playing");
+    const onMedia = (e: Event) => propsRef.current.onAudible?.(e.type === "media-started-playing");
     el.addEventListener("page-title-updated", onTitle);
     el.addEventListener("did-navigate", onNav);
     el.addEventListener("did-navigate-in-page", onNav);
