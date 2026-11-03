@@ -94,15 +94,22 @@ const YT_NOADS = `(function () {
     window.fetch = function (input, init) {
       var url = typeof input === "string" ? input : (input && input.url) || "";
       var p = of.apply(this, arguments);
-      if (!/youtubei\\/v1\\/(player|next|browse)/.test(url)) return p;
+      // player/next only — browse responses are megabytes of feed data with
+      // no player ads in them, and rewriting them slows the whole site down.
+      if (!/youtubei\\/v1\\/(player|next)/.test(url)) return p;
       return p.then(function (res) {
         try {
           if (res.bodyUsed) return res;
           var ct = (res.headers && res.headers.get("content-type")) || "";
           if (ct.indexOf("json") < 0) return res;
           return res.clone().text().then(function (txt) {
+            // Cheap scan first: most responses carry no ads at all — rebuilding
+            // those (parse + re-serialize) is pure overhead on every page load.
+            if (txt.indexOf("adPlacements") < 0 && txt.indexOf("adSlots") < 0 && txt.indexOf("playerAds") < 0 && txt.indexOf("adScreenLayouts") < 0) return res;
             try {
-              return new Response(JSON.stringify(scrub(JSON.parse(txt))), { headers: res.headers, status: res.status, statusText: res.statusText });
+              // Fresh response without the wire headers: content-encoding and
+              // content-length describe the OLD body, not this rebuilt one.
+              return new Response(JSON.stringify(scrub(JSON.parse(txt))), { status: res.status, statusText: res.statusText });
             } catch (e) {
               return res;
             }
