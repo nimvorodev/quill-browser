@@ -144,37 +144,28 @@ export function useNow(interval = 30000) {
 
 /**
  * Which tabs keep their live webview mounted in a background layer so media
- * keeps playing across tab switches. Membership is sticky (a playlist that
- * pauses between tracks must not lose its webview) and LRU-capped: the active
- * tab plus up to `cap - 1` background tabs. Pinned/ghost tabs play by the same
- * rules — a pinned music tab is exactly the use case.
- * ponytail: hidden layers keep running their JS; if that ever costs real CPU,
- * the upgrade path is suspending non-audible layers.
+ * keeps playing across tab switches. Efficiency-first rule: a background tab
+ * keeps its layer ONLY while it is actually audible — idle tabs give their
+ * renderer back and reload when revisited. The active tab is always a member
+ * (its webview must exist to hand off when it starts playing).
+ * ponytail: hidden layers that do stay keep running their JS; audible-only
+ * membership is the memory cap. Graceful expiry = a "keep for N minutes"
+ * timestamp, if paused-but-resumable ever matters.
  */
-export function computeKeepAlive(tabs: Tab[], prev: Set<string>, activeId: string, cap = 4): Set<string> {
+export function computeKeepAlive(tabs: Tab[], activeId: string, cap = 4): Set<string> {
   const isLive = (t: Tab) => t.view === "original" || t.view === "live";
   const liveTabs = tabs.filter(isLive);
   const activeIsLive = liveTabs.some((t) => t.id === activeId);
   const bgCap = Math.max(1, cap - (activeIsLive ? 1 : 0));
   const next = new Set<string>();
-  // Seated members keep their order; closed / view-changed tabs drop out.
   let bg = 0;
-  for (const id of prev) {
-    if (id === activeId) continue;
-    if (liveTabs.some((t) => t.id === id) && bg < bgCap) {
-      next.add(id);
+  for (const t of liveTabs) {
+    if (t.id === activeId || !t.audible) continue;
+    if (bg < bgCap) {
+      next.add(t.id);
       bg++;
     }
   }
-  // Audible tabs join while there's room. At cap, seated members win over
-  // newcomers — stability beats freshness, otherwise every recompute would
-  // rotate the window and remount exactly the webviews we're keeping alive.
-  for (const t of liveTabs) {
-    if (t.id === activeId || !t.audible || next.has(t.id) || bg >= bgCap) continue;
-    next.add(t.id);
-    bg++;
-  }
-  // The active tab is the most-recently-used member and never gets evicted.
   if (activeIsLive) next.add(activeId);
   return next;
 }

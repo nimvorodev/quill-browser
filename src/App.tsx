@@ -241,18 +241,10 @@ export default function App() {
      desk), so its webview element survives tab switches. Tabs that were
      playing audio stay mounted in the background — LRU-capped. */
   const [keepAlive, setKeepAlive] = useState<Set<string>>(new Set());
-  // One render behind activeId, so the layer of the tab being left never
-  // unmounts before keepAlive has caught up (a remount would restart media).
-  const prevActiveRef = useRef(activeId);
   useEffect(() => {
-    const left = prevActiveRef.current;
-    prevActiveRef.current = activeId;
     setKeepAlive((prev) => {
-      const next = computeKeepAlive(tabs, prev, activeId);
-      // Same active tab and no membership change: nothing to do. On a switch,
-      // always return a fresh set so a re-render follows — that is what drops
-      // the left tab's layer when it didn't earn keep-alive.
-      if (left === activeId && next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
+      const next = computeKeepAlive(tabs, activeId);
+      if (next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
       return next;
     });
   }, [tabs, activeId]);
@@ -991,7 +983,7 @@ export default function App() {
       } catch {
         /* storage full */
       }
-    }, 400);
+    }, 1000);
     return () => window.clearTimeout(t);
   }, [tabs, activeId, settings.restoreSession]);
 
@@ -1392,21 +1384,21 @@ export default function App() {
                   webviewKey={t.id}
                   muted={t.muted === true}
                   onAudible={(a) => patch(t.id, (x) => (x.audible === a ? x : { ...x, audible: a }))}
+                  dormant={t.id !== activeId && !t.audible}
                 />
               </div>
             ))}
 
           {/* Live-view layers, tube-desk style: the active original view renders here
-              (its webview element survives tab switches), and tabs that were
-              playing audio stay mounted in the background so media continues.
-              prevActiveRef keeps the just-left tab mounted for the one render
-              before keepAlive catches up — a remount would restart the media. */}
+              (its webview element survives tab switches), and AUDIBLE background tabs
+              stay mounted so media continues. Idle tabs give their renderer back —
+              the stale keepAlive set bridges the one render on switch-away. */}
           {tabs
             .filter(
               (t) =>
                 (t.view === "original" || t.view === "live") &&
                 !t.error?.startsWith("BLOCKED:") &&
-                (keepAlive.has(t.id) || t.id === tab?.id || t.id === prevActiveRef.current),
+                (keepAlive.has(t.id) || t.id === tab?.id),
             )
             .map((t) => (
               <div

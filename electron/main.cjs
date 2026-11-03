@@ -205,7 +205,9 @@ function createWindow() {
       nodeIntegration: false,
       webviewTag: true,
       partition: APP_PARTITION,
-      spellcheck: true,
+      // The app UI has no text worth spellchecking (the address bar) — skipping
+      // it keeps the spell dictionaries out of the renderer.
+      spellcheck: false,
     },
   });
 

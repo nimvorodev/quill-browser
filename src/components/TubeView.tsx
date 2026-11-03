@@ -208,6 +208,7 @@ export function TubeView({
   webviewKey,
   muted,
   onAudible,
+  dormant,
 }: {
   url: string;
   history: HistoryEntry[];
@@ -225,6 +226,8 @@ export function TubeView({
   webviewKey?: string;
   muted?: boolean;
   onAudible?: (audible: boolean) => void;
+  /** Hidden, idle, silent: skip the player/webview until the tab is opened. */
+  dormant?: boolean;
 }) {
   const vref: VideoRef = parseVideo(url) ?? { kind: "home" };
   // Followed channels — a local subscription feed, no account, no tracking.
@@ -234,6 +237,20 @@ export function TubeView({
   const [seenVids, setSeenVids] = useLocal<Record<string, string[]>>("tube.seen", {});
   const toggleFollow = (f: { name: string; path: string }) =>
     setFollows((p) => (p.some((x) => x.path === f.path) ? p.filter((x) => x.path !== f.path) : [f, ...p]));
+
+  // Dormant: a background tube tab that isn't playing anything. Its player
+  // (and any original-mode webview) stays unmounted until the tab is opened —
+  // an idle YouTube player costs a renderer process for nothing.
+  if (dormant) {
+    return (
+      <div className="grid h-full place-items-center p-6 text-center">
+        <p className="text-[17px] italic text-ink3">
+          this desk is asleep — open the tab and it picks up where you left it
+          <span className="mt-1 block text-[13px]">playing tabs stay awake in the background</span>
+        </p>
+      </div>
+    );
+  }
 
   // Desktop: the original youtube.com page in a real webview.
   if (mode === "original" && isDesktop) {
