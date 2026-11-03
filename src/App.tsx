@@ -171,6 +171,8 @@ export default function App() {
   const [shelf, setShelf] = useLocal<ShelfItem[]>("shelf", DEFAULT_SHELF);
   // The read-later queue: newest first, "read next" pops the oldest (the end).
   const [later, setLater] = useLocal<LaterItem[]>("later", []);
+  /** Hosts the user switched to "direct frame" — they open live from now on. */
+  const [siteViews, setSiteViews] = useLocal<Record<string, "live">>("siteviews", {});
   /** Per-tab desk mode for GitHub / YouTube: Quill's desk, or the original site in a webview (desktop). */
   const [deskModes, setDeskModes] = useState<Record<string, DeskMode>>({});
 
@@ -553,7 +555,9 @@ export default function App() {
       // ponytail: raw files (PDFs, images) and real search-engine pages open as the live site —
       // a reader parse makes no sense for either, and the relays proved too flaky for SERPs.
       const imageFile = /\.(pdf|jpe?g|png|gif|webp|avif|bmp|svg)(?:[?#]|$)/i.test(url);
-      const forceLive = !mode && !handled && (imageFile || isPdfUrl(url) || isSearchSiteUrl(url) || isSpaHost(url));
+      // Sites the user pinned to the direct frame open that way too.
+      const prefLive = !mode && siteViews[hostOf(url)] === "live";
+      const forceLive = prefLive || (!mode && !handled && (imageFile || isPdfUrl(url) || isSearchSiteUrl(url) || isSpaHost(url)));
       const view: ViewMode = forceLive ? "original" : mode === "live" ? "original" : mode || (handled ? "reader" : def.view);
       const sub: OriginalSubMode = forceLive ? "live" : mode === "live" ? "live" : origSubOverride || (mode ? target.originalMode : def.origSub);
       const relay = !hit && !handled && (view === "reader" || view === "split" || (view === "original" && sub !== "live"));
@@ -590,7 +594,7 @@ export default function App() {
       if (relay) loadReader(target.id, url, title, target.ghost, filters, false, paramBlocked);
       else abortTabFetch(target.id);
     },
-    [engine, settings.httpsOnly, filtersFor, defaultNavMode, abortTabFetch, patch, addBlocked, recordHistory, loadReader, toast, activeId],
+    [engine, settings.httpsOnly, filtersFor, defaultNavMode, abortTabFetch, patch, addBlocked, recordHistory, loadReader, toast, activeId, siteViews],
   );
 
   const go = useCallback(
@@ -762,8 +766,23 @@ export default function App() {
       const view: ViewMode = nextView === "live" ? "original" : nextView === "split" && selfRenders(tab.url) ? "reader" : nextView;
       const sub: OriginalSubMode = nextView === "live" ? "live" : origSub || tab.originalMode || "shielded";
       patch(tab.id, (t) => ({ ...t, view, originalMode: sub }));
+      // Per-site view memory: sites that only work as the direct frame shouldn't
+      // make you flip the switch on every visit. Picking "direct frame" sticks
+      // for the host; picking shielded/interactive clears it. Reader/split leave it alone.
+      const host = hostOf(tab.url);
+      if (view === "original" && sub === "live" && !selfRenders(tab.url)) {
+        setSiteViews((p) => (p[host] === "live" ? p : { ...p, [host]: "live" }));
+        toast("this site now opens as the direct frame", "var(--cyan)", "antenna");
+      } else if (view === "original" && sub !== "live" && host) {
+        setSiteViews((p) => {
+          if (!(host in p)) return p;
+          const next = { ...p };
+          delete next[host];
+          return next;
+        });
+      }
     },
-    [tab, patch],
+    [tab, patch, setSiteViews, toast],
   );
 
   const toggleBookmark = useCallback(() => {
