@@ -1,4 +1,4 @@
-import type { HistoryEntry, Bookmark, Note } from "./store";
+import type { HistoryEntry, Bookmark, LaterItem, Note } from "./store";
 import type { Settings } from "./settings";
 import { DEFAULT_SETTINGS } from "./settings";
 import { isSafeWebUrl } from "./nav";
@@ -11,6 +11,7 @@ export interface Backup {
   history?: HistoryEntry[];
   bookmarks?: Bookmark[];
   notes?: Note[];
+  later?: LaterItem[];
 }
 
 const str = (v: unknown, max = 200) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -60,6 +61,14 @@ export function parseBackup(raw: string): Backup | null {
       .filter((x) => isSafeWebUrl(str(x.url, 2048)) && !str(x.url, 2048).startsWith("quill://"))
       .map((x) => ({ title: str(x.title, 200), url: str(x.url, 2048), doodle: str(x.doodle, 40) || "star" }));
     if (list.length) out.bookmarks = list.slice(0, 500);
+  }
+
+  if (Array.isArray(b.later)) {
+    const list = b.later
+      .filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null)
+      .filter((x) => isSafeWebUrl(str(x.url, 2048)) && !str(x.url, 2048).startsWith("quill://"))
+      .map((x) => ({ url: str(x.url, 2048), title: str(x.title, 200), at: num(x.at) }));
+    if (list.length) out.later = list.slice(0, 200);
   }
 
   if (Array.isArray(b.notes)) {

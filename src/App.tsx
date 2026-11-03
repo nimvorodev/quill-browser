@@ -39,6 +39,7 @@ import {
   NOTE_DEFAULT_W,
   type Bookmark,
   type HistoryEntry,
+  type LaterItem,
   type Note,
   type OriginalSubMode,
   type ShelfItem,
@@ -168,6 +169,8 @@ export default function App() {
     { id: uid(), text: "read one long thing\ninstead of 40 short ones", color: "#bdf3fb", x: 96, y: 170, rot: 2, at: Date.now(), w: NOTE_DEFAULT_W, h: 120, place: "start" },
   ]);
   const [shelf, setShelf] = useLocal<ShelfItem[]>("shelf", DEFAULT_SHELF);
+  // The read-later queue: newest first, "read next" pops the oldest (the end).
+  const [later, setLater] = useLocal<LaterItem[]>("later", []);
   /** Per-tab desk mode for GitHub / YouTube: Quill's desk, or the original site in a webview (desktop). */
   const [deskModes, setDeskModes] = useState<Record<string, DeskMode>>({});
 
@@ -366,14 +369,14 @@ export default function App() {
   }, [tab, toast]);
   /* ---------------- backup / restore ---------------- */
   const exportBackup = useCallback(() => {
-    const payload = { v: 1 as const, at: Date.now(), settings, history, bookmarks, notes };
+    const payload = { v: 1 as const, at: Date.now(), settings, history, bookmarks, notes, later };
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
     a.download = `quill-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast("backup saved to Downloads", "var(--lime)", "download");
-  }, [settings, history, bookmarks, notes, toast]);
+  }, [settings, history, bookmarks, notes, later, toast]);
   const importBackup = useCallback(
     async (file: File) => {
       const b = parseBackup(await file.text());
@@ -384,10 +387,11 @@ export default function App() {
           [...b.history!, ...h.filter((x) => !b.history!.some((y) => y.url === x.url))].sort((x, y) => y.at - x.at).slice(0, 400),
         );
       if (b.bookmarks) setBookmarks((bs) => [...b.bookmarks!, ...bs.filter((x) => !b.bookmarks!.some((y) => y.url === x.url))]);
+      if (b.later) setLater((q) => [...b.later!, ...q.filter((x) => !b.later!.some((y) => y.url === x.url))].slice(0, 200));
       if (b.notes) setNotes((ns) => [...b.notes!, ...ns.filter((x) => !b.notes!.some((y) => y.id === x.id))]);
       toast("backup restored", "var(--lime)", "check");
     },
-    [setSettings, setHistory, setBookmarks, setNotes, toast],
+    [setSettings, setHistory, setBookmarks, setNotes, setLater, toast],
   );
 
   const addBlocked = useCallback(
@@ -782,6 +786,25 @@ export default function App() {
     }
   }, [tab, bookmarks, setBookmarks, toast]);
 
+  /* ---------------- read-later queue ---------------- */
+  const toggleLater = useCallback(() => {
+    if (!tab || tab.url === HOME) return toast("nothing to queue here", "var(--orange)", "clock");
+    setLater((q) => {
+      if (q.some((x) => x.url === tab.url)) {
+        toast("dropped from the queue", "var(--paper-3)", "clock");
+        return q.filter((x) => x.url !== tab.url);
+      }
+      toast("saved to read later", "var(--cyan)", "clock");
+      return [{ url: tab.url, title: tab.title || hostOf(tab.url), at: Date.now() }, ...q];
+    });
+  }, [tab, setLater, toast]);
+  const readNext = useCallback(() => {
+    const next = later.length ? later[later.length - 1] : null;
+    if (!next) return toast("the queue is empty", "var(--orange)", "clock");
+    setLater((q) => q.filter((x) => x.url !== next.url));
+    go(next.url);
+  }, [later, setLater, go, toast]);
+
   const askAI = useCallback(
     (text: string, ctxOverride?: string) => {
       let resolved = ctxOverride;
@@ -1091,6 +1114,15 @@ export default function App() {
       { id: "focus", label: focus ? "Leave focus mode" : "Focus mode — hide the chrome", section: "tools", icon: "eyeOff", run: () => setFocus((f) => !f) },
       { id: "bm-this", label: "Bookmark this page", section: "tools", icon: "star", hint: "Ctrl/⌘+D", run: toggleBookmark },
       {
+        id: "later",
+        label: later.some((x) => x.url === tab?.url) ? "Remove from read later" : "Read this page later",
+        section: "tools",
+        icon: "clock",
+        keywords: "read later queue save",
+        run: toggleLater,
+      },
+      { id: "read-next", label: `Read next from the queue${later.length ? ` (${later.length})` : ""}`, section: "tools", icon: "forward", keywords: "queue read later next", run: readNext },
+      {
         id: "copy",
         label: "Copy this page's text",
         section: "tools",
@@ -1159,6 +1191,9 @@ export default function App() {
     setAiCfg,
     savePdf,
     exportBackup,
+    toggleLater,
+    readNext,
+    later,
     toast,
   ]);
 
@@ -1314,6 +1349,8 @@ export default function App() {
             history={history}
             bookmarks={bookmarks}
             shelf={SHELF}
+            queued={later.some((x) => x.url === tab.url)}
+            onReadLater={toggleLater}
           />
         )}
 
@@ -1401,6 +1438,9 @@ export default function App() {
               onEngine={(e) => setSettings((s) => ({ ...s, engine: e.id }))}
               onAsk={(p) => askAI(p)}
               onPalette={() => setPalette(true)}
+              later={later}
+              onRemoveLater={(url) => setLater((q) => q.filter((x) => x.url !== url))}
+              onReadNext={readNext}
             />
           ) : blockedNav ? (
             <BlockedCard

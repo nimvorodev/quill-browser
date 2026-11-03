@@ -44,6 +44,12 @@ export interface Bookmark {
   url: string;
   doodle: string;
 }
+/** A page saved to the read-later queue (the "to read" list on the start page). */
+export interface LaterItem {
+  url: string;
+  title: string;
+  at: number;
+}
 export interface Note {
   id: string;
   text: string;

@@ -36,6 +36,8 @@ export function Toolbar({
   history,
   bookmarks,
   shelf,
+  queued,
+  onReadLater,
 }: {
   tab: Tab;
   input: string;
@@ -64,6 +66,8 @@ export function Toolbar({
   history: HistoryEntry[];
   bookmarks: Bookmark[];
   shelf: { name: string; url: string; blurb: string }[];
+  queued: boolean;
+  onReadLater: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
@@ -283,6 +287,19 @@ export function Toolbar({
             </div>
           )}
 
+          <button
+            onClick={onReadLater}
+            className="transition hover:scale-125"
+            title={queued ? "Remove from the read-later queue" : "Read later — saved to the start page queue"}
+          >
+            <Icon
+              name="clock"
+              size={17}
+              fill={queued ? "var(--cyan)" : "none"}
+              className={queued ? "text-cyan" : "text-ink2 hover:text-cyan"}
+              strokeWidth={queued ? 1.4 : 1.9}
+            />
+          </button>
           <button
             onClick={onBookmark}
             className="transition hover:scale-125"

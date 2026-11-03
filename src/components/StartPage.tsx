@@ -3,7 +3,7 @@ import { Icon } from "./Icons";
 import { type SearchEngine } from "../lib/nav";
 import { SearchBox } from "./SearchBox";
 import { NOTE_COLORS, StickyNote } from "./StickyNote";
-import { uid, useNow, NOTE_DEFAULT_H, NOTE_DEFAULT_W, type Bookmark, type HistoryEntry, type Note, type ShelfItem } from "../lib/store";
+import { uid, useNow, NOTE_DEFAULT_H, NOTE_DEFAULT_W, type Bookmark, type HistoryEntry, type LaterItem, type Note, type ShelfItem } from "../lib/store";
 import { CAT_LABEL, CAT_COLOR, type Category } from "../lib/filters";
 
 const SHELF_COLORS = ["var(--cyan)", "var(--orange)", "var(--yellow)", "var(--violet)", "var(--lime)", "var(--pink)", "var(--red)"];
@@ -52,6 +52,9 @@ export function StartPage({
   onEngine,
   onAsk,
   onPalette,
+  later,
+  onRemoveLater,
+  onReadNext,
 }: {
   onOpen: (url: string) => void;
   onSearch: (q: string, engineId?: string) => void;
@@ -71,6 +74,10 @@ export function StartPage({
   onEngine: (e: SearchEngine) => void;
   onAsk: (prompt: string) => void;
   onPalette: () => void;
+  /** The read-later queue, newest first. */
+  later: LaterItem[];
+  onRemoveLater: (url: string) => void;
+  onReadNext: () => void;
 }) {
   const now = useNow(30000);
   const g = greeting(now);
@@ -294,6 +301,37 @@ export function StartPage({
               <p className="col-span-full py-4 text-center text-[16px] italic text-ink3">the shelf is empty — tap edit to add your places</p>
             )}
           </div>
+
+          {/* read-later queue */}
+          {later.length > 0 && (
+            <section className="min-w-0">
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <h2 className="text-[24px] text-ink" style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>
+                  <span className="hd-underline">to read</span> <span className="text-[15px] italic text-ink3">({later.length})</span>
+                </h2>
+                <button onClick={onReadNext} className="hd-soft btn-sketch bg-cyan/60 px-2.5 py-0.5 text-[14px] text-[#12171f] hover:bg-cyan">
+                  read next <Icon name="forward" size={12} />
+                </button>
+              </div>
+              <div className="ruled border-l-2 border-ink/20 pl-3">
+                {later.map((item) => (
+                  <div key={item.url + item.at} className="group flex w-full min-w-0 items-baseline gap-2 py-[5px] text-left leading-[28px]">
+                    <button onClick={() => onOpen(item.url)} className="min-w-0 flex-1 truncate text-[17px] text-ink hover:underline decoration-wavy decoration-cyan underline-offset-4">
+                      {item.title || item.url}
+                    </button>
+                    <span className="shrink-0 text-[13px] text-ink3">{timeAgo(item.at)}</span>
+                    <button
+                      onClick={() => onRemoveLater(item.url)}
+                      className="shrink-0 text-ink3 opacity-0 transition group-hover:opacity-100 hover:text-red"
+                      title="Drop from the queue"
+                    >
+                      <Icon name="close" size={12} strokeWidth={2.6} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* recent + bookmarks */}
           <div className="grid gap-6 sm:grid-cols-2">
