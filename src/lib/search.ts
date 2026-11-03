@@ -33,7 +33,7 @@ async function mwmblHits(q: string, signal?: AbortSignal): Promise<{ hits: Searc
       });
       if (hits.length >= 14) break;
     }
-    return hits.length ? { hits, via: "mwmbl api (direct)", source: "mwmbl" } : null;
+    return hits.length ? { hits, via: "mwmbl api (direct)" } : null;
   } catch {
     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     return null;
