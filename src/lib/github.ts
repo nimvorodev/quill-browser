@@ -208,7 +208,10 @@ export interface Readme {
   raw: string;
 }
 
-const DANGEROUS_TAGS = new Set(["script", "iframe", "object", "embed", "link", "meta", "base", "style", "title", "form", "button", "input", "select", "textarea", "applet", "frame", "frameset", "marquee"]);
+// noscript/template/svg/math: mutation-XSS carriers — they re-parse with
+// different semantics than DOMParser's parse-serialize round trip, so
+// sanitized-looking HTML can reassemble into live script on injection.
+const DANGEROUS_TAGS = new Set(["script", "iframe", "object", "embed", "link", "meta", "base", "style", "title", "form", "button", "input", "select", "textarea", "applet", "frame", "frameset", "marquee", "noscript", "template", "svg", "math"]);
 
 function cleanUrlAttr(value: string | null, kind: "link" | "media"): string | null {
   if (value == null) return null;
@@ -289,6 +292,12 @@ export function sanitizeReadmeHtml(html: string, owner: string, repo: string, br
       const cleaned = cleanUrlAttr(el.getAttribute(attr), kind);
       if (cleaned == null) {
         el.removeAttribute(attr);
+        return;
+      }
+      // Inline data: images are kept verbatim — they'd otherwise fall through
+      // to the relative-URL rewriter and come out as bogus GitHub URLs.
+      if (cleaned.startsWith("data:image/")) {
+        el.setAttribute(attr, cleaned);
         return;
       }
       if (/^(#|mailto:|tel:|https?:)/i.test(cleaned)) {

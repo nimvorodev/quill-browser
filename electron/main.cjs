@@ -75,7 +75,9 @@ const SCRIPTLETS = fs.readFileSync(path.join(__dirname, "scriptlets.cjs"), "utf8
 /** Wire real downloads for a session: save into the user's Downloads folder, stream progress to the renderer. */
 function wireDownloads(ses) {
   ses.on("will-download", (_e, item) => {
-    const file = item.getFilename() || "download";
+    // The filename is network-controlled — basename it so nothing ever escapes
+    // the Downloads folder, whatever the server claims.
+    const file = path.basename(item.getFilename() || "download");
     const dot = file.lastIndexOf(".");
     const base = dot > 0 ? file.slice(0, dot) : file;
     const ext = dot > 0 ? file.slice(dot) : "";
