@@ -424,7 +424,7 @@ export function Scribble({
           }}
           placeholder="scribble words…"
           rows={Math.max(1, editing.value.split("\n").length)}
-          className="absolute z-[96] min-w-[120px] resize-none border-2 border-dashed border-ink/50 bg-paper2/90 px-1 outline-none"
+          className={`absolute z-[96] min-w-[120px] resize-none border-2 border-dashed border-ink/50 bg-paper2/90 px-1 outline-none ${hiding ? "invisible" : ""}`}
           style={{
             left: editTarget.x,
             top: editTarget.y - scroll.current,

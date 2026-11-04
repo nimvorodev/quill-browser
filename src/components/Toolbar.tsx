@@ -231,6 +231,18 @@ export function Toolbar({
               setOpen(true);
             }}
             onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                // Chrome convention: Esc in the address bar reverts the typed
+                // text to the page's URL and puts the pen down.
+                e.preventDefault();
+                e.stopPropagation();
+                setInput(tab.url === HOME ? "" : tab.url);
+                setOpen(false);
+                setHi(-1);
+                inputRef.current?.blur();
+                setFocused(false);
+                return;
+              }
               if (e.key === "ArrowDown") {
                 e.preventDefault();
                 setHi((h) => Math.min(h + 1, sugs.length - 1));

@@ -968,8 +968,10 @@ export default function App() {
     const typing = /input|textarea|select/i.test((e.target as HTMLElement)?.tagName || "");
     if (!mod) {
       // Focus mode joins "anything that's open" for Esc — but only when it's
-      // the outermost open thing (find bar, scribble, drawers, palette first).
-      if (e.key === "Escape" && focus && !drawer && !scribble && !findOpen && !palette) {
+      // the outermost open thing (find bar, scribble, drawers, palette first)
+      // and nothing is being typed into (Esc in the address bar reverts that).
+      const t = e.target as HTMLElement | null;
+      if (e.key === "Escape" && focus && !drawer && !scribble && !findOpen && !palette && !/input|textarea|select/i.test(t?.tagName || "")) {
         e.preventDefault();
         setFocus(false);
         return;
