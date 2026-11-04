@@ -967,6 +967,13 @@ export default function App() {
     const mod = e.metaKey || e.ctrlKey;
     const typing = /input|textarea|select/i.test((e.target as HTMLElement)?.tagName || "");
     if (!mod) {
+      // Focus mode joins "anything that's open" for Esc — but only when it's
+      // the outermost open thing (find bar, scribble, drawers, palette first).
+      if (e.key === "Escape" && focus && !drawer && !scribble && !findOpen && !palette) {
+        e.preventDefault();
+        setFocus(false);
+        return;
+      }
       if (e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();
         travel(-1);
@@ -1377,7 +1384,10 @@ export default function App() {
       {settings.ambient && <Ambient />}
 
       {/* ---------- chrome ---------- */}
-      <div className={`relative z-40 shrink-0 transition-all duration-300 ${focus ? "pointer-events-none -translate-y-full opacity-0" : ""}`}>
+      <div
+        inert={focus || undefined}
+        className={`relative z-40 shrink-0 transition-all duration-300 ${focus ? "pointer-events-none -translate-y-full max-h-0 overflow-hidden opacity-0" : "max-h-[420px]"}`}
+      >
         <TabStrip
           tabs={tabs}
           activeId={tab?.id || ""}
@@ -1683,7 +1693,10 @@ export default function App() {
         </div>
       </main>
 
-      <div className={`relative z-30 shrink-0 transition-all duration-300 ${focus ? "pointer-events-none translate-y-full opacity-0" : ""}`}>
+      <div
+        inert={focus || undefined}
+        className={`relative z-30 shrink-0 transition-all duration-300 ${focus ? "pointer-events-none translate-y-full max-h-0 overflow-hidden opacity-0" : "max-h-[80px]"}`}
+      >
         <StatusBar
           blockedTotal={stats.total}
           tabBlocked={tab?.blocked.length || 0}
