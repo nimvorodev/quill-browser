@@ -18,6 +18,7 @@ import { NotesLayer } from "./components/NotesLayer";
 import type { DeskMode } from "./components/DeskHeader";
 import { desktop, openOutside, type DownloadItem } from "./lib/platform";
 import { KNOWN_HOSTS } from "./lib/filters";
+import { inkKey } from "./lib/scribble";
 import { ENGINES, HOME, SHELF, engineById, forceHttps, hostOf, isPdfUrl, isSafeWebUrl, isSearchSiteUrl, isSpaHost, isUrl, normalize, parseSearchUrl, prettyUrl, type SearchEngine } from "./lib/nav";
 import { blockCheck, RULE_COUNT, stripTrackingParams, type BlockResult, type FilterOptions } from "./lib/filters";
 import { readPage } from "./lib/reader";
@@ -762,6 +763,27 @@ export default function App() {
     },
     [patch, recordHistory],
   );
+
+  /**
+   * How far the page under the scribble overlay is scrolled, in page pixels —
+   * ink is stored in page coordinates and rides the content. Live pages are
+   * guest processes, so their scroll is asked over the bridge; in-app views
+   * (reader, desks, start) scroll in our own DOM.
+   */
+  const probeScroll = useCallback((): number | Promise<number> => {
+    if (tab && (tab.view === "original" || tab.view === "live")) {
+      const wv = webviewMap.current.get(tab.id);
+      if (wv) {
+        return wv
+          .executeJavaScript("(window.pageYOffset || document.documentElement.scrollTop || 0)")
+          .then((v) => (typeof v === "number" && Number.isFinite(v) ? v : 0), () => 0);
+      }
+      return 0;
+    }
+    const els = Array.from(document.querySelectorAll<HTMLElement>("main .no-scrollbar"));
+    const el = els.find((e) => e.scrollHeight > e.clientHeight + 4 && e.offsetParent !== null);
+    return el ? el.scrollTop : 0;
+  }, [tab, webviewMap]);
 
   const reload = useCallback(() => {
     if (!tab) return;
@@ -1810,7 +1832,7 @@ export default function App() {
       </Drawer>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} commands={commands} />
-      <Scribble open={scribble} onClose={() => setScribble(false)} dark={settings.theme === "night"} />
+      <Scribble open={scribble} onClose={() => setScribble(false)} dark={settings.theme === "night"} pageKey={inkKey(tab?.url, HOME)} probeScroll={probeScroll} />
 
       {/* ---------- first run ---------- */}
       {!seenIntro && (

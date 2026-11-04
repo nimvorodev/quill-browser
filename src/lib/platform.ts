@@ -36,6 +36,8 @@ export interface DesktopBridge {
   clearBrowsingData(): Promise<void>;
   /** Screenshot of the whole app window (page + overlays) as a PNG data URL; "" if unavailable. */
   capturePage(): Promise<string>;
+  /** Copy a PNG data URL (scribble capture) to the system clipboard. */
+  copyImage(dataUrl: string): Promise<boolean>;
   /** Reveal a downloaded file in the system file manager. */
   showItem(path: string): Promise<void>;
   /** Turn encrypted DNS (Cloudflare DoH) on/off; applies after an app restart. */

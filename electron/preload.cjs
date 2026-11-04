@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("quill", {
   onBlocked: on("quill:blocked"),
   clearBrowsingData: () => ipcRenderer.invoke("quill:clear-browsing-data"),
   capturePage: () => ipcRenderer.invoke("quill:capture-page"),
+  copyImage: (dataUrl) => ipcRenderer.invoke("quill:copy-image", String(dataUrl || "")),
   showItem: (p) => ipcRenderer.invoke("quill:show-item", String(p || "")),
   onDownload: on("quill:download"),
   setDoh: (v) => ipcRenderer.invoke("quill:set-doh", v === true),

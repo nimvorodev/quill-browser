@@ -9,7 +9,7 @@
 //  - window.open from any web content is routed to the system browser.
 //  - Ad/tracker hosts are blocked at the network layer for the web partition.
 
-const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu, webContents } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu, webContents, clipboard, nativeImage } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -344,6 +344,18 @@ ipcMain.handle("quill:capture-page", async () => {
   if (!win) return "";
   const img = await win.webContents.capturePage();
   return img.isEmpty() ? "" : img.toDataURL();
+});
+/** Copy a PNG data URL (the scribble capture) to the system clipboard. */
+ipcMain.handle("quill:copy-image", (_e, dataUrl) => {
+  try {
+    const img = nativeImage.createFromDataURL(String(dataUrl || ""));
+    if (img.isEmpty()) return false;
+    // Electron 45 dropped clipboard.writeImage — the generic write takes an image field.
+    clipboard.write({ image: img });
+    return true;
+  } catch {
+    return false;
+  }
 });
 ipcMain.handle("quill:set-doh", (_e, enabled) => {
   try {

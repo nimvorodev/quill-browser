@@ -38,6 +38,7 @@ export interface WebFrameProps {
 export type WebviewEl = HTMLElement & {
   src: string;
   loadURL(u: string): Promise<void>;
+  executeJavaScript(code: string): Promise<unknown>;
   getURL(): string;
   getTitle(): string;
   canGoBack(): boolean;
