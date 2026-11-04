@@ -76,12 +76,26 @@ const SCRIPTLETS = fs.readFileSync(path.join(__dirname, "scriptlets.cjs"), "utf8
 
 /** Wire real downloads for a session: save into the user's Downloads folder, stream progress to the renderer. */
 // Paths the download/PDF handlers themselves chose — the only files the
-// renderer may reveal in Explorer. Keeps the reveal allow-list tight without
-// locking dialog-saved files out of the drawer. Capped, insertion order.
-const knownDownloads = new Set();
+// renderer may reveal in Explorer. Persisted to disk so "reveal" survives
+// app restarts, just like the drawer does. Capped, insertion order.
+const KNOWN_DL_FILE = path.join(app.getPath("userData"), "known-downloads.json");
+const loadKnown = () => {
+  try {
+    const list = JSON.parse(fs.readFileSync(KNOWN_DL_FILE, "utf8"));
+    return new Set(Array.isArray(list) ? list.filter((x) => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
+};
+const knownDownloads = loadKnown();
 const rememberDownload = (p) => {
   knownDownloads.add(p);
   if (knownDownloads.size > 500) knownDownloads.delete(knownDownloads.values().next().value);
+  try {
+    fs.writeFileSync(KNOWN_DL_FILE, JSON.stringify([...knownDownloads]));
+  } catch {
+    /* best-effort — reveal still works this session */
+  }
 };
 
 // URLs with a download still in flight (dialog open / not yet done): a second
