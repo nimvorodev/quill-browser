@@ -868,6 +868,95 @@ export default function App() {
     [tab, patch, setSiteZooms],
   );
 
+  // Ctrl+wheel zooms, like every browser: on app-renderer surfaces directly,
+  // and inside webviews via the scriptlet's console bridge (quill:zoom).
+  // A real scroll gesture emits dozens of wheel events — one gesture must be
+  // one zoom step, so bumps are time-throttled.
+  const lastZoomBump = useRef(0);
+  useEffect(() => {
+    const clampZ = (z: number) => Math.max(70, Math.min(160, z));
+    const bump = (d: number) => {
+      if (!tab) return;
+      const now = performance.now();
+      if (now - lastZoomBump.current < 120) return;
+      lastZoomBump.current = now;
+      applyZoom(clampZ(tab.zoom + d * 10));
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      bump(e.deltaY < 0 ? 1 : -1);
+    };
+    const onBus = (e: Event) => bump(Number((e as CustomEvent).detail) || 0);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("quill:zoom", onBus);
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("quill:zoom", onBus);
+    };
+  }, [tab, applyZoom]);
+
+  /* ---------------- page context menu ---------------- */
+  // Webviews forward Chromium's hit-test info (quill:ctx); app-renderer text
+  // gets a minimal copy menu. One menu, all actions.
+  const [ctx, setCtx] = useState<{ x: number; y: number; linkURL: string; mediaType: string; mediaURL: string; selectionText: string; editable: boolean; key: string; wcId: number } | null>(null);
+  useEffect(() => {
+    const onWebview = (e: Event) => setCtx((e as CustomEvent).detail);
+    const onApp = (e: MouseEvent) => {
+      const sel = window.getSelection()?.toString().trim() || "";
+      if (!sel) return; // no selection: nothing a minimal menu offers
+      e.preventDefault();
+      setCtx({ x: e.clientX, y: e.clientY, linkURL: "", mediaType: "none", mediaURL: "", selectionText: sel, editable: false, key: "", wcId: 0 });
+    };
+    window.addEventListener("quill:ctx", onWebview);
+    window.addEventListener("contextmenu", onApp);
+    return () => {
+      window.removeEventListener("quill:ctx", onWebview);
+      window.removeEventListener("contextmenu", onApp);
+    };
+  }, []);
+  const closeCtx = () => setCtx(null);
+  useEffect(() => {
+    if (!ctx) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCtx(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ctx]);
+  const ctxTargetTab = ctx ? tabs.find((t) => t.id === ctx.key) : undefined;
+  const ctxRun = (fn: () => void) => () => {
+    fn();
+    setCtx(null);
+  };
+  const copyText = (text: string, label: string) => {
+    void navigator.clipboard.writeText(text).then(
+      () => toast(`${label} copied`, "var(--lime)", "copy"),
+      () => toast("couldn't reach the clipboard", "var(--orange)", "copy"),
+    );
+  };
+  const saveImageAs = (url: string, key: string) => {
+    const el = key ? webviewMap.current.get(key) : undefined;
+    // The guest downloads its own image through the anchor dance — same-origin
+    // images save; cross-origin ones may navigate instead (CORS ceiling).
+    void el?.executeJavaScript(`(() => { const a = document.createElement("a"); a.href = ${JSON.stringify(url)}; a.download = ""; a.click(); return 1; })()`).catch(() => {});
+  };
+  const copyImage = async (url: string) => {
+    try {
+      const blob = await (await fetch(url)).blob();
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(String(fr.result || ""));
+        fr.onerror = rej;
+        fr.readAsDataURL(blob);
+      });
+      const ok = desktop ? await desktop.copyImage(dataUrl) : false;
+      toast(ok ? "image copied" : "couldn't copy this image", ok ? "var(--lime)" : "var(--orange)", "copy");
+    } catch {
+      toast("couldn't copy this image", "var(--orange)", "copy");
+    }
+  };
+
   /* ---------------- read-later queue ---------------- */
   const toggleLater = useCallback(() => {
     if (!tab || tab.url === HOME) return toast("nothing to queue here", "var(--orange)", "clock");
@@ -1073,6 +1162,9 @@ export default function App() {
     } else if (e.key === "-") {
       e.preventDefault();
       if (tab) applyZoom(Math.max(70, tab.zoom - 10));
+    } else if (e.key === "0") {
+      e.preventDefault();
+      if (tab) applyZoom(100); // reset, like every browser
     } else if (/^[1-9]$/.test(e.key)) {
       // Ctrl/Cmd+1..8 jumps to that tab; Ctrl/Cmd+9 to the last (browser convention).
       e.preventDefault();
@@ -1765,6 +1857,49 @@ export default function App() {
         </button>
       )}
 
+      {/* page context menu (webviews + reader selections) */}
+      {ctx && (
+        <>
+          <div className="no-drag fixed inset-0 z-[84]" onClick={closeCtx} onContextMenu={(e) => { e.preventDefault(); closeCtx(); }} />
+          <div
+            className="no-drag fixed z-[85] min-w-[220px] border-2 border-ink bg-paper2 py-1 text-ink ink-shadow"
+            style={{ left: Math.min(ctx.x, window.innerWidth - 240), top: Math.min(ctx.y, window.innerHeight - 300), borderRadius: "12px 4px 14px 4px / 4px 14px 4px 12px" }}
+            role="menu"
+          >
+            {ctx.key === activeId && (
+              <>
+                <CtxItem label="Back" onClick={ctxRun(() => travel(-1))} disabled={ctxTargetTab ? ctxTargetTab.idx <= 0 : true} />
+                <CtxItem label="Forward" onClick={ctxRun(() => travel(1))} disabled={ctxTargetTab ? ctxTargetTab.idx >= ctxTargetTab.stack.length - 1 : true} />
+                <CtxItem label="Reload" onClick={ctxRun(() => reload())} />
+                <CtxSep />
+              </>
+            )}
+            {ctx.linkURL && (
+              <>
+                <CtxItem label="Open link in new tab" onClick={ctxRun(() => openNew(ctx.linkURL))} />
+                <CtxItem label="Copy link address" onClick={ctxRun(() => copyText(ctx.linkURL, "link"))} />
+                <CtxSep />
+              </>
+            )}
+            {ctx.mediaType === "image" && ctx.mediaURL && (
+              <>
+                <CtxItem label="Open image in new tab" onClick={ctxRun(() => openNew(ctx.mediaURL))} />
+                <CtxItem label="Save image as…" onClick={ctxRun(() => saveImageAs(ctx.mediaURL, ctx.key))} />
+                <CtxItem label="Copy image" onClick={ctxRun(() => void copyImage(ctx.mediaURL))} />
+                <CtxSep />
+              </>
+            )}
+            {ctx.selectionText && <CtxItem label="Copy" onClick={ctxRun(() => copyText(ctx.selectionText, "text"))} />}
+            {ctx.wcId && desktop && (
+              <>
+                <CtxItem label="Save as PDF…" onClick={ctxRun(() => { void desktop?.savePdf(ctx.wcId, ctxTargetTab?.title || hostOf(ctxTargetTab?.url || "") || "page").then((ok) => toast(ok ? "PDF saved to Downloads" : "couldn't print this page", ok ? "var(--lime)" : "var(--red)", ok ? "download" : "x")); })} />
+                <CtxItem label="Inspect element" onClick={ctxRun(() => { const el = ctx.key ? webviewMap.current.get(ctx.key) : undefined; try { (el as unknown as { openDevTools?: () => void })?.openDevTools?.(); } catch { /* gone */ } })} />
+              </>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ---------- drawers ---------- */}
       <Drawer open={drawer === "history"} title="the log" icon="history" onClose={() => setDrawer(null)}>
         <HistoryPanel
@@ -2086,4 +2221,20 @@ function Ambient() {
       ))}
     </div>
   );
+}
+
+function CtxItem({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      role="menuitem"
+      className={["flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[15px] transition", disabled ? "text-ink3/50" : "text-ink hover:bg-yellow/45"].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+function CtxSep() {
+  return <div className="mx-2 my-1 border-t border-dashed border-ink/30" />;
 }

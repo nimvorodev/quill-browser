@@ -31,6 +31,19 @@
     }
   }
 
+  // ---- Ctrl+wheel zoom bridge ----
+  // Ctrl+wheel is page zoom in every browser; the guest can't reach Quill's
+  // zoom, so it flags the gesture over console.log — WebFrame listens for
+  // "console-message" on the embedder side and relays it to the app.
+  // (A page spoofing this marker can only nudge the visible zoom level.)
+  try {
+    window.addEventListener("wheel", function (e) {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      console.log("__quill_zoom__" + (e.deltaY < 0 ? "1" : "-1"));
+    }, { passive: false });
+  } catch (e) {}
+
   // ---- YouTube ad scrub (youtube.com only) ----
   var host = "";
   try {

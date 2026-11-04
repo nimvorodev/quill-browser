@@ -104,6 +104,48 @@ function DesktopView(p: WebFrameProps) {
     // with two players can briefly misreport. isCurrentlyAudible polling is
     // the upgrade path if that ever bites.
     const onMedia = (e: Event) => propsRef.current.onAudible?.(e.type === "media-started-playing");
+    // Ctrl+wheel zoom flagged by the scriptlet inside the guest rides the
+    // console bridge — the only channel that crosses the webview boundary
+    // without new IPC plumbing.
+    const onConsole = (e: Event) => {
+      const msg = (e as unknown as { message?: string }).message || "";
+      if (msg.startsWith("__quill_zoom__")) {
+        // strict numeric parse: "1" → 1, "-1" → -1. (endsWith("1") matched BOTH
+        // — every zoom-out was silently read as zoom-in.)
+        window.dispatchEvent(new CustomEvent("quill:zoom", { detail: Number(msg.slice("__quill_zoom__".length)) || 0 }));
+      }
+    };
+    // Chromium's own context menu never shows in a webview — the embedder
+    // owns it. Surface the hit-test info (link / media / selection) so the
+    // app can render a proper browser menu.
+    const onCtx = (e: Event) => {
+      const p = (e as unknown as { params: { x: number; y: number; linkURL?: string; mediaType?: string; mediaURL?: string; selectionText?: string; isEditable?: boolean; srcURL?: string } }).params;
+      // Electron reports webview context-menu x/y in the EMBEDDER window's
+      // coordinates, already zoom-scaled (verified: p.y carries the webview's
+      // top offset and scales with the guest zoom). Use them raw — any offset
+      // or zoom math on top drifts the menu off the cursor.
+      let wcId = 0;
+      try {
+        wcId = el.getWebContentsId();
+      } catch {
+        /* gone */
+      }
+      window.dispatchEvent(
+        new CustomEvent("quill:ctx", {
+          detail: {
+            x: p?.x || 0,
+            y: p?.y || 0,
+            linkURL: p?.linkURL || "",
+            mediaType: p?.mediaType || "none",
+            mediaURL: p?.mediaURL || p?.srcURL || "",
+            selectionText: p?.selectionText || "",
+            editable: !!p?.isEditable,
+            key: propsRef.current.elKey,
+            wcId,
+          },
+        }),
+      );
+    };
     el.addEventListener("page-title-updated", onTitle);
     el.addEventListener("did-navigate", onNav);
     el.addEventListener("did-navigate-in-page", onNav);
@@ -112,6 +154,8 @@ function DesktopView(p: WebFrameProps) {
     el.addEventListener("found-in-page", onFound);
     el.addEventListener("media-started-playing", onMedia);
     el.addEventListener("media-paused", onMedia);
+    el.addEventListener("console-message", onConsole);
+    el.addEventListener("context-menu", onCtx);
     if (p.elMap && p.elKey) p.elMap.current.set(p.elKey, el);
     if (p.canGoBackRef) {
       p.canGoBackRef.current = () => {
@@ -135,6 +179,8 @@ function DesktopView(p: WebFrameProps) {
       el.removeEventListener("found-in-page", onFound);
       el.removeEventListener("media-started-playing", onMedia);
       el.removeEventListener("media-paused", onMedia);
+      el.removeEventListener("console-message", onConsole);
+      el.removeEventListener("context-menu", onCtx);
       if (p.elMap && p.elKey && p.elMap.current.get(p.elKey) === el) p.elMap.current.delete(p.elKey);
       if (p.canGoBackRef) p.canGoBackRef.current = null;
     };

@@ -137,7 +137,7 @@ export function LiveView(p: LiveProps) {
     const onMsg = (e: MessageEvent) => {
       if (liveRef.current) return;
       if (!frameRef.current || e.source !== frameRef.current.contentWindow) return;
-      const d = e.data as { type?: string; href?: string; newTab?: boolean; selector?: string } | null;
+      const d = e.data as { type?: string; href?: string; newTab?: boolean; selector?: string; dir?: number } | null;
       if (!d || typeof d !== "object") return;
       if (d.type === "quill:navigate" && isSafeHref(d.href || "")) {
         p.onNavigate(d.href as string, Boolean(d.newTab));
@@ -145,6 +145,9 @@ export function LiveView(p: LiveProps) {
         p.onZapped(d.selector as string);
       } else if (d.type === "quill:zap-off") {
         setZapMode(false);
+      } else if (d.type === "quill:zoom" && (d.dir === 1 || d.dir === -1)) {
+        // rides the same throttled zoom path as the webview console bridge
+        window.dispatchEvent(new CustomEvent("quill:zoom", { detail: d.dir }));
       }
     };
     window.addEventListener("message", onMsg);
@@ -166,6 +169,17 @@ export function LiveView(p: LiveProps) {
     setZapMode(false);
     setForceFrame(false);
   }, [tab.url, tab.nonce, mode, frameKey]);
+
+  // Flash the zoom % in the control row when it changes, then fade.
+  const [zoomFlash, setZoomFlash] = useState(false);
+  const prevZoom = useRef(p.zoom);
+  useEffect(() => {
+    if (p.zoom === prevZoom.current) return;
+    prevZoom.current = p.zoom;
+    setZoomFlash(true);
+    const t = setTimeout(() => setZoomFlash(false), 1400);
+    return () => clearTimeout(t);
+  }, [p.zoom]);
 
   const onLoad = () => {
     setLoaded(true);
@@ -277,6 +291,15 @@ export function LiveView(p: LiveProps) {
           </button>
 
           <div className="ml-auto flex items-center gap-1">
+            {zoomFlash && p.zoom !== 100 && (
+              <span
+                className="hd-soft mr-1 border-2 border-ink bg-paper2 px-2 py-[1px] text-[13px] font-semibold tabular-nums text-ink ink-shadow"
+                style={{ borderRadius: "10px 3px 12px 3px / 3px 12px 3px 10px", transform: "rotate(-1.5deg)" }}
+                role="status"
+              >
+                {p.zoom}%
+              </span>
+            )}
             {!compact && (
               <button
                 onClick={p.onReader}

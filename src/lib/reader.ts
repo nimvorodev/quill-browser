@@ -455,6 +455,14 @@ const FRAME_SCRIPT = `<script data-quill-frame="1">
       });
     }
   });
+  // Ctrl+wheel zooms the tab: the srcDoc frame owns its wheel events, so it
+  // flags the gesture up to the app (same trust level as the webview console
+  // bridge — a page can only nudge the visible zoom level).
+  window.addEventListener("wheel", function (e) {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    parent.postMessage({ type: "quill:zoom", dir: e.deltaY < 0 ? 1 : -1 }, "*");
+  }, { passive: false });
 })();
 </script>`;
 
