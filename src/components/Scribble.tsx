@@ -128,12 +128,22 @@ export function Scribble({
   };
 
   /* ---------- persistence (per page) ---------- */
+  const pendingKey = useRef("");
   const scheduleSave = () => {
+    pendingKey.current = pageKey;
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => saveInk(pageKey, { strokes: strokes.current, texts: texts.current }), 350);
   };
   useEffect(() => {
     if (!open) return;
+    // A save scheduled for the PREVIOUS page may still be pending (350ms debounce):
+    // flush it with the data it was scheduled for before this page's ink loads,
+    // or it would fire later and write this page's strokes under the old key.
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = 0;
+      saveInk(pendingKey.current || pageKey, { strokes: strokes.current, texts: texts.current });
+    }
     const doc = loadInk(pageKey);
     strokes.current = doc.strokes;
     texts.current = doc.texts;
@@ -220,6 +230,9 @@ export function Scribble({
   };
 
   const undo = () => {
+    // ponytail: ops don't reference items — after a stroke-erase, undo pops the
+    // newest ADD, which may not be the erased one. Item-linked history is the
+    // upgrade path if that ever bites.
     const op = ops.current.pop();
     if (op === "s") strokes.current.pop();
     else if (op === "t") texts.current.pop();
