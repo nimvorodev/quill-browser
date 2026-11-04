@@ -429,6 +429,7 @@ const KEYS: [string, string][] = [
   ["Alt + ← / →", "back / forward"],
   ["Alt + Home", "go home"],
   ["Ctrl/⌘ + +/−", "zoom in / out"],
+  ["Ctrl/⌘ + 1…9", "jump to tab (9 = last)"],
   ["Esc", "close anything that's open"],
 ];
 

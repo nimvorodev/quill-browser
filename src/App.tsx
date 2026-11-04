@@ -175,6 +175,8 @@ export default function App() {
   const [later, setLater] = useLocal<LaterItem[]>("later", []);
   /** Hosts the user switched to "direct frame" — they open live from now on. */
   const [siteViews, setSiteViews] = useLocal<Record<string, "live">>("siteviews", {});
+  /** Zoom remembered per host — Chrome-style: 130% on one site sticks to that site. */
+  const [siteZooms, setSiteZooms] = useLocal<Record<string, number>>("sitezoom", {});
   /** Hosts where every pop-up dies — for stream sites whose ads rotate past every heuristic. */
   const [popupHosts, setPopupHosts] = useLocal<Record<string, true>>("popupblock", {});
   /** Per-tab desk mode for GitHub / YouTube: Quill's desk, or the original site in a webview (desktop). */
@@ -586,6 +588,8 @@ export default function App() {
         view: hit ? "reader" : view,
         originalMode: sub,
         title,
+        // A site you zoomed before comes back at that zoom.
+        zoom: siteZooms[hostOf(url)] ?? 100,
         article: null,
         error: hit ? `BLOCKED:${hit.rule}` : null,
         loading: relay,
@@ -606,7 +610,7 @@ export default function App() {
       if (relay) loadReader(target.id, url, title, target.ghost, filters, false, paramBlocked);
       else abortTabFetch(target.id);
     },
-    [engine, settings.httpsOnly, filtersFor, defaultNavMode, abortTabFetch, patch, addBlocked, recordHistory, loadReader, toast, activeId, siteViews],
+    [engine, settings.httpsOnly, filtersFor, defaultNavMode, abortTabFetch, patch, addBlocked, recordHistory, loadReader, toast, activeId, siteViews, siteZooms],
   );
 
   const go = useCallback(
@@ -844,6 +848,26 @@ export default function App() {
     }
   }, [tab, bookmarks, setBookmarks, toast]);
 
+  /** Zoom the active tab and remember it per host (100% clears the memory). */
+  const applyZoom = useCallback(
+    (z: number) => {
+      if (!tab) return;
+      patch(tab.id, (t) => ({ ...t, zoom: z }));
+      const h = hostOf(tab.url);
+      if (!h || tab.url === HOME) return;
+      setSiteZooms((p) => {
+        if (z === 100) {
+          if (!(h in p)) return p;
+          const next = { ...p };
+          delete next[h];
+          return next;
+        }
+        return p[h] === z ? p : { ...p, [h]: z };
+      });
+    },
+    [tab, patch, setSiteZooms],
+  );
+
   /* ---------------- read-later queue ---------------- */
   const toggleLater = useCallback(() => {
     if (!tab || tab.url === HOME) return toast("nothing to queue here", "var(--orange)", "clock");
@@ -1045,10 +1069,15 @@ export default function App() {
       window.dispatchEvent(new Event("quill:zap"));
     } else if (e.key === "=" || e.key === "+") {
       e.preventDefault();
-      if (tab) patch(tab.id, (t) => ({ ...t, zoom: Math.min(160, t.zoom + 10) }));
+      if (tab) applyZoom(Math.min(160, tab.zoom + 10));
     } else if (e.key === "-") {
       e.preventDefault();
-      if (tab) patch(tab.id, (t) => ({ ...t, zoom: Math.max(70, t.zoom - 10) }));
+      if (tab) applyZoom(Math.max(70, tab.zoom - 10));
+    } else if (/^[1-9]$/.test(e.key)) {
+      // Ctrl/Cmd+1..8 jumps to that tab; Ctrl/Cmd+9 to the last (browser convention).
+      e.preventDefault();
+      const target = e.key === "9" ? tabs[tabs.length - 1] : tabs[Number(e.key) - 1];
+      if (target) setActiveId(target.id);
     }
   };
 
@@ -1330,6 +1359,14 @@ export default function App() {
         onSplit={() => setTabView(tab.view === "split" ? "reader" : "split")}
         onOpenOutside={() => openOutside(tab.url)}
         onAsk={(p, passage) => askAI(p, passage)}
+        onNote={(text) => {
+          // Stagger notes onto the start-page board so they don't stack.
+          setNotes((ns) => [
+            ...ns,
+            { id: uid(), text, color: "#fff2a8", x: 24 + (ns.length % 6) * 36, y: 64 + (ns.length % 6) * 30, rot: -2.5 + (ns.length % 3), at: Date.now() },
+          ]);
+          toast("pinned to your start page ✦", "var(--yellow)", "note");
+        }}
         onLink={(href, inNewTab) => (inNewTab ? openNew(href) : go(href))}
         shieldsOn={settings.shields}
         fontStep={settings.fontStep}
@@ -1447,7 +1484,7 @@ export default function App() {
             onPanel={(p) => setDrawer(p)}
             onScribble={() => setScribble((s) => !s)}
             zoom={tab.zoom}
-            setZoom={(z) => patch(tab.id, (t) => ({ ...t, zoom: z }))}
+            setZoom={applyZoom}
             history={history}
             bookmarks={bookmarks}
             shelf={SHELF}

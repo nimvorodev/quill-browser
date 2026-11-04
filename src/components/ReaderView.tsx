@@ -187,6 +187,7 @@ export function ReaderView({
   onSplit,
   onOpenOutside,
   onAsk,
+  onNote,
   onLink,
   shieldsOn,
   fontStep,
@@ -211,6 +212,8 @@ export function ReaderView({
   onSplit?: () => void;
   onOpenOutside: () => void;
   onAsk: (prompt: string, passage?: string) => void;
+  /** Save a text selection as a sticky note (start page). */
+  onNote?: (text: string) => void;
   onLink: (href: string, newTab?: boolean) => void;
   shieldsOn: boolean;
   fontStep: number;
@@ -730,24 +733,39 @@ export function ReaderView({
       </div>
 
       {sel && (
-        <button
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onAsk(
-              `Explain this selected passage and give me one sharp question to ask about it:\n\n“${sel.text.slice(0, 1200)}”`,
-              sel.text,
-            );
-            setSel(null);
-            window.getSelection()?.removeAllRanges();
-          }}
-          className={[
-            "pop-in hd absolute z-30 flex -translate-x-1/2 items-center gap-1.5 bg-pink px-2.5 py-1 text-[15px] text-white ink-shadow-sm",
-            sel.below ? "" : "-translate-y-full",
-          ].join(" ")}
+        <div
+          className={["pop-in hd absolute z-30 flex -translate-x-1/2 items-center gap-1 ink-shadow-sm", sel.below ? "" : "-translate-y-full"].join(" ")}
           style={{ left: sel.x, top: sel.y }}
         >
-          <Icon name="spark" size={14} /> ask AI about this
-        </button>
+          {onNote && (
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onNote(sel.text.slice(0, 600));
+                setSel(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+              className="flex items-center gap-1.5 bg-yellow px-2.5 py-1 text-[15px] font-bold text-[#1a2440]"
+              title="Save this passage as a sticky note on your start page"
+            >
+              <Icon name="note" size={14} /> note
+            </button>
+          )}
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onAsk(
+                `Explain this selected passage and give me one sharp question to ask about it:\n\n“${sel.text.slice(0, 1200)}”`,
+                sel.text,
+              );
+              setSel(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            className="flex items-center gap-1.5 bg-pink px-2.5 py-1 text-[15px] text-white"
+          >
+            <Icon name="spark" size={14} /> ask AI about this
+          </button>
+        </div>
       )}
     </div>
   );
