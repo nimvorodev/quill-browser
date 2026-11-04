@@ -193,6 +193,11 @@ export default function App() {
     if (!desktop) return;
     void desktop.setBlockRules(KNOWN_HOSTS, settings.shields);
   }, [settings.shields]);
+  // Desktop: downloads ask where to save when the setting is on.
+  useEffect(() => {
+    if (!desktop) return;
+    void desktop.setAskSave(settings.askSave);
+  }, [settings.askSave]);
   // One-time: older installs saved defaultView "reader" (re-ink first); the shipped default is
   // "original" ("the real site first"), so a stale "reader" is reset once. Re-choosing reader sticks.
   useEffect(() => {

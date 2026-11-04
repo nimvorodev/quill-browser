@@ -30,6 +30,8 @@ export interface DesktopBridge {
   openExternal(url: string): Promise<void>;
   /** Ad / tracker rules the main process should block at the network level. */
   setBlockRules(hosts: string[], enabled: boolean): Promise<void>;
+  /** Show the system save dialog for each download instead of auto-saving. */
+  setAskSave(enabled: boolean): Promise<void>;
   /** Blocked-request counter from the network layer (webview pages). */
   onBlocked(cb: (info: { url: string; host: string }) => void): () => void;
   /** Clear cookies, cache and storage for the webview partition. */

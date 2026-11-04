@@ -16,6 +16,7 @@ export interface Settings {
   doh: boolean;
   fingerprint: boolean;
   blockAutoplay: boolean;
+  askSave: boolean;
   theme: "day" | "night";
   home: string;
   showBookmarkBar: boolean;
@@ -43,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   doh: false,
   fingerprint: true,
   blockAutoplay: true,
+  askSave: true,
   theme: "day",
   home: "quill://start",
   showBookmarkBar: true,
@@ -74,6 +76,7 @@ export const TOGGLES: ToggleDef[] = [
   { key: "noReferrer", label: "Strip referrer", icon: "eyeOff", note: "Sites never learn where you came from.", real: true },
   { key: "strictSandbox", label: "Strict frame sandbox", icon: "split", note: "Framed pages get an opaque origin: no access to Quill storage.", real: true },
   { key: "blockAutoplay", label: "No autoplay", icon: "stop", note: "Media must wait for a click before it starts.", real: true },
+  { key: "askSave", label: "Ask where to save", icon: "download", note: "Show the system save dialog for each download — off saves straight to your Downloads folder.", real: true },
   { key: "saveHistory", label: "Write history", icon: "history", note: "Turn off and nothing gets written to disk.", real: true },
   { key: "ghostDefault", label: "Ghost by default", icon: "ghost", note: "Every new tab opens in ghost mode.", real: true },
   { key: "fingerprint", label: "Fingerprint noise", icon: "target", note: "Advisory: no canvas/font fingerprinting is done by Quill itself.", real: false },

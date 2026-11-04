@@ -9,7 +9,7 @@
 //  - window.open from any web content is routed to the system browser.
 //  - Ad/tracker hosts are blocked at the network layer for the web partition.
 
-const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu, webContents, clipboard, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu, webContents, clipboard, nativeImage, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -41,6 +41,8 @@ let win = null;
 let blockHosts = new Set();
 let blockEnabled = true;
 let blockedCount = 0;
+// Ask where to save each download (the settings panel drives this).
+let askSave = true;
 
 /** Hostname-suffix match: "doubleclick.net" blocks "ad.doubleclick.net" too. */
 function hostBlocked(hostname) {
@@ -74,7 +76,7 @@ const SCRIPTLETS = fs.readFileSync(path.join(__dirname, "scriptlets.cjs"), "utf8
 
 /** Wire real downloads for a session: save into the user's Downloads folder, stream progress to the renderer. */
 function wireDownloads(ses) {
-  ses.on("will-download", (_e, item) => {
+  ses.on("will-download", async (_e, item) => {
     // The filename is network-controlled — basename it so nothing ever escapes
     // the Downloads folder, whatever the server claims.
     const file = path.basename(item.getFilename() || "download");
@@ -82,7 +84,17 @@ function wireDownloads(ses) {
     const base = dot > 0 ? file.slice(0, dot) : file;
     const ext = dot > 0 ? file.slice(dot) : "";
     let savePath = path.join(app.getPath("downloads"), file);
-    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${base} (${i})${ext}`);
+    if (askSave) {
+      // The user picks the destination; the OS dialog owns overwrite checks.
+      const picked = await dialog.showSaveDialog(win, { defaultPath: savePath });
+      if (picked.canceled || !picked.filePath) {
+        item.cancel();
+        return;
+      }
+      savePath = picked.filePath;
+    } else {
+      for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${base} (${i})${ext}`);
+    }
     const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: file, path: savePath, received: 0, total: item.getTotalBytes(), state: "downloading" };
     item.setSavePath(savePath);
     const push = () => win?.webContents.send("quill:download", { ...state });
@@ -333,6 +345,9 @@ ipcMain.handle("quill:set-block-rules", (_e, hosts, enabled) => {
     blockHosts = new Set(hosts.filter((h) => typeof h === "string" && /^[a-z0-9.-]{1,253}$/i.test(h)).map((h) => h.toLowerCase()));
   }
   blockEnabled = enabled !== false;
+});
+ipcMain.handle("quill:set-ask-save", (_e, enabled) => {
+  askSave = enabled === true;
 });
 ipcMain.handle("quill:clear-browsing-data", async () => {
   const ses = session.fromPartition(WEB_PARTITION);

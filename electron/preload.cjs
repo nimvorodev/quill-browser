@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("quill", {
 
   openExternal: (url) => ipcRenderer.invoke("quill:open-external", String(url || "")),
   setBlockRules: (hosts, enabled) => ipcRenderer.invoke("quill:set-block-rules", Array.isArray(hosts) ? hosts : [], enabled !== false),
+  setAskSave: (enabled) => ipcRenderer.invoke("quill:set-ask-save", enabled === true),
   onBlocked: on("quill:blocked"),
   clearBrowsingData: () => ipcRenderer.invoke("quill:clear-browsing-data"),
   capturePage: () => ipcRenderer.invoke("quill:capture-page"),
