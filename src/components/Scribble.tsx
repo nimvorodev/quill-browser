@@ -39,11 +39,20 @@ export function Scribble({ open, onClose, dark }: { open: boolean; onClose: () =
       ctx.globalCompositeOperation = s.erase ? "destination-out" : "source-over";
       ctx.globalAlpha = s.erase ? 1 : highlightAlpha(s);
       ctx.strokeStyle = s.color;
+      ctx.fillStyle = s.color;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
+      const n = s.pts.length;
+      if (n === 1) {
+        // A tap is a dot — the curve loop below would draw nothing for it.
+        ctx.beginPath();
+        ctx.arc(s.pts[0].x, s.pts[0].y, s.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
       ctx.beginPath();
       ctx.moveTo(s.pts[0].x, s.pts[0].y);
-      for (let i = 1; i < s.pts.length - 1; i++) {
+      for (let i = 1; i < n - 1; i++) {
         const mid = { x: (s.pts[i].x + s.pts[i + 1].x) / 2, y: (s.pts[i].y + s.pts[i + 1].y) / 2 };
         ctx.lineWidth = s.size * (0.6 + s.pts[i].p * 0.8);
         ctx.quadraticCurveTo(s.pts[i].x, s.pts[i].y, mid.x, mid.y);
@@ -51,6 +60,10 @@ export function Scribble({ open, onClose, dark }: { open: boolean; onClose: () =
         ctx.beginPath();
         ctx.moveTo(mid.x, mid.y);
       }
+      // Close the tail: without this the stroke stops half a segment short
+      // of the release point (the loop leaves an empty subpath at the last mid).
+      ctx.lineWidth = s.size * (0.6 + s.pts[n - 1].p * 0.8);
+      ctx.lineTo(s.pts[n - 1].x, s.pts[n - 1].y);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -110,7 +123,13 @@ export function Scribble({ open, onClose, dark }: { open: boolean; onClose: () =
         ref={canvasRef}
         className="absolute inset-0 touch-none"
         onPointerDown={(e) => {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          // Capture can legitimately throw (stylus disconnect, untracked pointer)
+          // — the stroke must survive that, so never let it abort the gesture.
+          try {
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          } catch {
+            /* keep drawing without capture */
+          }
           const p = pos(e);
           current.current = {
             pts: [{ ...p, p: 0.5 }],
