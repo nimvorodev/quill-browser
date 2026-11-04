@@ -108,7 +108,15 @@ function wireDownloads(ses) {
   ses.on("will-download", (e, item) => {
     const dlUrl = item.getURL();
     try {
-      fs.appendFileSync(path.join(app.getPath("userData"), "downloads.log"), `${new Date().toISOString()} ${dlUrl} -> ${item.getFilename()}\n`);
+      const logFile = path.join(app.getPath("userData"), "downloads.log");
+      // Keep the diagnostic log from growing forever — rotate at ~256 KB.
+      try {
+        const st = fs.statSync(logFile);
+        if (st.size > 262144) fs.writeFileSync(logFile, "");
+      } catch {
+        /* not there yet */
+      }
+      fs.appendFileSync(logFile, `${new Date().toISOString()} ${dlUrl} -> ${item.getFilename()}\n`);
     } catch {
       /* logging is best-effort */
     }
@@ -121,6 +129,9 @@ function wireDownloads(ses) {
       return;
     }
     pendingDlUrls.add(dlUrl);
+    // Safety valve: if a 'done' ever failed to fire, the guard would leak —
+    // a cap clears stale entries long after any real dialog has closed.
+    if (pendingDlUrls.size > 100) pendingDlUrls.clear();
     // Ask mode: we deliberately set NO save path — Electron's own save dialog
     // (the one titled with the URL) asks where to save, and cancelling it
     // cancels the item. Opening our own dialog on top of it was the double
@@ -137,29 +148,33 @@ function wireDownloads(ses) {
 
 /** Ask-mode tracker: Electron's dialog owns the path; we watch it land. */
 async function trackDownload(item, dlUrl) {
-  try {
-    const file = path.basename(item.getFilename() || "download");
-    const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: file, path: "", received: 0, total: item.getTotalBytes(), state: "downloading" };
-    const push = () => win?.webContents.send("quill:download", { ...state });
+  const file = path.basename(item.getFilename() || "download");
+  const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: file, path: "", received: 0, total: item.getTotalBytes(), state: "downloading" };
+  const push = () => win?.webContents.send("quill:download", { ...state });
+  push();
+  item.on("updated", () => {
+    state.received = item.getReceivedBytes();
     push();
-    item.on("updated", () => {
-      state.received = item.getReceivedBytes();
-      push();
-    });
-    item.once("done", (_ev, s) => {
-      state.received = item.getReceivedBytes();
-      state.state = s === "completed" ? "completed" : s;
-      try {
-        state.path = item.getSavePath() || "";
-        if (state.path) rememberDownload(state.path);
-      } catch {
-        /* item gone */
+  });
+  item.once("done", (_ev, s) => {
+    state.received = item.getReceivedBytes();
+    state.state = s === "completed" ? "completed" : s;
+    try {
+      state.path = item.getSavePath() || "";
+      if (state.path) {
+        rememberDownload(state.path);
+        // The user may have renamed the file in the dialog — show what's on disk.
+        state.filename = path.basename(state.path) || state.filename;
       }
-      push();
-    });
-  } finally {
+    } catch {
+      /* item gone */
+    }
+    push();
+    // The dedupe guard lives until the dialog is fully resolved (done fires on
+    // save AND on cancel) — releasing it any earlier would let a double-fire
+    // opened while the dialog is up slip past and stack a second window.
     pendingDlUrls.delete(dlUrl);
-  }
+  });
 }
 
 async function placeDownload(item, dlUrl) {
