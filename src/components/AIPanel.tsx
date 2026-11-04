@@ -440,7 +440,7 @@ export function AIPanel({
                   onClick={() => setCfg((c) => ({ ...c, provider: p.id as ProviderId, baseUrl: p.base || c.baseUrl, model: c.provider === p.id ? c.model : p.models[0] }))}
                   className={[
                     "hd-soft flex items-start gap-2.5 p-2 text-left transition",
-                    cfg.provider === p.id ? "bg-yellow/50 ink-shadow-sm" : "bg-paper2 hover:bg-paper3/60",
+                    cfg.provider === p.id ? "bg-yellow ink-shadow-sm" : "bg-paper2 hover:bg-paper3/60",
                   ].join(" ")}
                 >
                   <span
@@ -451,7 +451,7 @@ export function AIPanel({
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[16.5px] leading-tight">{p.name}</span>
-                    <span className="block text-[13.5px] italic leading-snug text-ink3">{p.tagline}</span>
+                    <span className={["block text-[13.5px] italic leading-snug", cfg.provider === p.id ? "text-[#1a2440]/75" : "text-ink3"].join(" ")}>{p.tagline}</span>
                   </span>
                 </button>
               ))}
