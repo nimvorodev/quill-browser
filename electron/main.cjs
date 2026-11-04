@@ -75,27 +75,92 @@ const SCRIPTLETS = fs.readFileSync(path.join(__dirname, "scriptlets.cjs"), "utf8
 /* ---------------- downloads ---------------- */
 
 /** Wire real downloads for a session: save into the user's Downloads folder, stream progress to the renderer. */
+// Paths the download/PDF handlers themselves chose — the only files the
+// renderer may reveal in Explorer. Keeps the reveal allow-list tight without
+// locking dialog-saved files out of the drawer. Capped, insertion order.
+const knownDownloads = new Set();
+const rememberDownload = (p) => {
+  knownDownloads.add(p);
+  if (knownDownloads.size > 500) knownDownloads.delete(knownDownloads.values().next().value);
+};
+
+// URLs with a download still in flight (dialog open / not yet done): a second
+// will-download for the same URL while the first is pending is a double-fire
+// (seen from PDF-viewer download buttons) — it dies here instead of stacking
+// a second save dialog.
+const pendingDlUrls = new Set();
+
 function wireDownloads(ses) {
-  ses.on("will-download", async (_e, item) => {
-    // The filename is network-controlled — basename it so nothing ever escapes
-    // the Downloads folder, whatever the server claims.
+  ses.on("will-download", (e, item) => {
+    const dlUrl = item.getURL();
+    try {
+      fs.appendFileSync(path.join(app.getPath("userData"), "downloads.log"), `${new Date().toISOString()} ${dlUrl} -> ${item.getFilename()}\n`);
+    } catch {
+      /* logging is best-effort */
+    }
+    if (pendingDlUrls.has(dlUrl)) {
+      try {
+        item.cancel();
+      } catch {
+        /* already gone */
+      }
+      return;
+    }
+    pendingDlUrls.add(dlUrl);
+    // Ask mode: we deliberately set NO save path — Electron's own save dialog
+    // (the one titled with the URL) asks where to save, and cancelling it
+    // cancels the item. Opening our own dialog on top of it was the double
+    // window. We only track progress and register the final path on done.
+    if (askSave) {
+      void trackDownload(item, dlUrl);
+      return;
+    }
+    // Auto mode sets the path synchronously — before this handler returns —
+    // so Electron's default save dialog never appears.
+    void placeDownload(item, dlUrl);
+  });
+}
+
+/** Ask-mode tracker: Electron's dialog owns the path; we watch it land. */
+async function trackDownload(item, dlUrl) {
+  try {
+    const file = path.basename(item.getFilename() || "download");
+    const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: file, path: "", received: 0, total: item.getTotalBytes(), state: "downloading" };
+    const push = () => win?.webContents.send("quill:download", { ...state });
+    push();
+    item.on("updated", () => {
+      state.received = item.getReceivedBytes();
+      push();
+    });
+    item.once("done", (_ev, s) => {
+      state.received = item.getReceivedBytes();
+      state.state = s === "completed" ? "completed" : s;
+      try {
+        state.path = item.getSavePath() || "";
+        if (state.path) rememberDownload(state.path);
+      } catch {
+        /* item gone */
+      }
+      push();
+    });
+  } finally {
+    pendingDlUrls.delete(dlUrl);
+  }
+}
+
+async function placeDownload(item, dlUrl) {
+  try {
+    // Auto mode: the filename is network-controlled — basename it so nothing
+    // ever escapes the Downloads folder, whatever the server claims.
     const file = path.basename(item.getFilename() || "download");
     const dot = file.lastIndexOf(".");
     const base = dot > 0 ? file.slice(0, dot) : file;
     const ext = dot > 0 ? file.slice(dot) : "";
     let savePath = path.join(app.getPath("downloads"), file);
-    if (askSave) {
-      // The user picks the destination; the OS dialog owns overwrite checks.
-      const picked = await dialog.showSaveDialog(win, { defaultPath: savePath });
-      if (picked.canceled || !picked.filePath) {
-        item.cancel();
-        return;
-      }
-      savePath = picked.filePath;
-    } else {
-      for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${base} (${i})${ext}`);
-    }
-    const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: file, path: savePath, received: 0, total: item.getTotalBytes(), state: "downloading" };
+    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${base} (${i})${ext}`);
+    // The dialog may have renamed the file — the drawer shows what's on disk.
+    rememberDownload(savePath);
+    const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: path.basename(savePath), path: savePath, received: 0, total: item.getTotalBytes(), state: "downloading" };
     item.setSavePath(savePath);
     const push = () => win?.webContents.send("quill:download", { ...state });
     push();
@@ -109,7 +174,11 @@ function wireDownloads(ses) {
       state.state = s === "completed" ? "completed" : s;
       push();
     });
-  });
+  } finally {
+    // The dialog is resolved either way (picked or cancelled) — same-URL
+    // double-fires land inside that window, later ones are new downloads.
+    pendingDlUrls.delete(dlUrl);
+  }
 }
 
 function installNetworkFilter() {
@@ -394,6 +463,7 @@ ipcMain.handle("quill:save-pdf", async (_e, wcId, name) => {
     let savePath = path.join(app.getPath("downloads"), `${safe}.pdf`);
     for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${safe} (${i}).pdf`);
     fs.writeFileSync(savePath, data);
+    rememberDownload(savePath);
     // Reuse the downloads drawer: it lands there as a finished download.
     win?.webContents.send("quill:download", { id: `pdf-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: data.length, total: data.length, state: "completed" });
     return true;
@@ -402,8 +472,13 @@ ipcMain.handle("quill:save-pdf", async (_e, wcId, name) => {
   }
 });
 ipcMain.handle("quill:show-item", (_e, p) => {
-  // Only files the download handler itself chose may be revealed.
-  if (typeof p === "string" && p.startsWith(app.getPath("downloads")) && fs.existsSync(p)) shell.showItemInFolder(p);
+  // Only files Quill itself downloaded/saved may be revealed — the registry is
+  // filled exclusively by the download and PDF handlers in this process.
+  if (typeof p === "string" && knownDownloads.has(p) && fs.existsSync(p)) {
+    shell.showItemInFolder(p);
+    return true;
+  }
+  return false;
 });
 
 /* ---------------- lifecycle ---------------- */

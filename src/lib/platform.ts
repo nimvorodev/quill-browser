@@ -40,8 +40,8 @@ export interface DesktopBridge {
   capturePage(): Promise<string>;
   /** Copy a PNG data URL (scribble capture) to the system clipboard. */
   copyImage(dataUrl: string): Promise<boolean>;
-  /** Reveal a downloaded file in the system file manager. */
-  showItem(path: string): Promise<void>;
+  /** Reveal a downloaded file in the system file manager; true when shown. */
+  showItem(path: string): Promise<boolean>;
   /** Turn encrypted DNS (Cloudflare DoH) on/off; applies after an app restart. */
   setDoh(enabled: boolean): Promise<boolean>;
   /** Real <title> of a webview page, delivered as it loads and changes. */

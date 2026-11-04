@@ -239,7 +239,7 @@ export default function App() {
   const [scribble, setScribble] = useState(false);
   const [focus, setFocus] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [downloads, setDownloads] = useLocal<DownloadItem[]>("downloads", []);
   /* ---------------- find in page (Ctrl/⌘+F) ---------------- */
   const [findOpen, setFindOpen] = useState(false);
   const [findQ, setFindQ] = useState("");
@@ -273,7 +273,8 @@ export default function App() {
     return desktop.onDownload((d) => {
       setDownloads((ds) => {
         const i = ds.findIndex((x) => x.id === d.id);
-        return i >= 0 ? ds.map((x) => (x.id === d.id ? d : x)) : [d, ...ds];
+        // Most-recent first, capped — the list outlives restarts now.
+        return i >= 0 ? ds.map((x) => (x.id === d.id ? d : x)) : [d, ...ds].slice(0, 60);
       });
       if (d.state === "completed") toast(`${d.filename} saved`, "var(--lime)", "download");
     });
