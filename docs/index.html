@@ -7,7 +7,7 @@
 <meta name="description" content="One click turns any page into a quiet paper edition. Read it, mark it up, and keep it. Free, no account, nothing tracks you." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,560;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Patrick+Hand&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,560;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper: #f6f1e4;
@@ -96,43 +96,83 @@
   footer .links { display: flex; gap: 22px; }
 
   .demo { margin: 88px 0 0; }
-  .window { background: var(--paper2); border: 1px solid var(--rule); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
-  .winbar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--rule); }
-  .traffic { display: flex; gap: 6px; }
-  .traffic i { width: 11px; height: 11px; border-radius: 50%; background: var(--rule); display: block; }
-  .traffic i:nth-child(1) { background: #e8a09a; }
-  .traffic i:nth-child(2) { background: #e6c477; }
-  .traffic i:nth-child(3) { background: #a9cf8f; }
-  .url { flex: 1; font-size: 12px; color: var(--ink3); background: #fff; border: 1px solid var(--rule); padding: 5px 12px; border-radius: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .reink-btn { font-family: var(--sans); font-size: 13px; font-weight: 600; color: #12171f; background: #f6da6e; border: 1.5px solid var(--ink); border-radius: 10px; padding: 7px 14px; cursor: pointer; white-space: nowrap; animation: pulseshadow 2.4s ease-in-out infinite; }
-  .reink-btn:hover { background: #efcf5a; }
-  @keyframes pulseshadow { 0%, 100% { box-shadow: 0 0 0 0 rgba(99, 80, 6, .35); } 50% { box-shadow: 0 0 0 9px rgba(99, 80, 6, 0); } }
 
-  .stage { position: relative; height: 400px; }
-  .view { position: absolute; inset: 0; padding: 22px 26px; overflow: hidden; transition: opacity .5s ease, transform .5s ease; }
-  .view-live { background: #ffffff; color: #232529; }
-  .view-paper { background: var(--paper2); opacity: 0; transform: scale(.985); pointer-events: none;
-    background-image: repeating-linear-gradient(transparent 0 26px, var(--rule) 26px 27px); }
-  .stage.show-paper .view-live { opacity: 0; transform: scale(.975); pointer-events: none; }
-  .stage.show-paper .view-paper { opacity: 1; transform: none; pointer-events: auto; }
+  /* Faithful Quill app replica — tokens lifted from src/index.css */
+  .quill-window {
+    --qp: #f7f4ea; --qp2: #fffdf6; --qp3: #efe9d8;
+    --qink: #1a2440; --qink2: #5b6480; --qink3: #9aa0b4;
+    --qrule: #cfe0ef; --qaccent: #ff5d8f; --qyellow: #ffd23f;
+    --qcyan: #23c3d6; --qlime: #8ed44b; --qorange: #ff8a3d; --qviolet: #8b6cf0;
+    background: var(--qp3);
+    border: 2px solid var(--qink);
+    border-radius: 16px 18px 16px 18px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    color: var(--qink);
+    font-family: "Patrick Hand", "Segoe Script", cursive;
+    transition: background .3s ease, color .3s ease;
+  }
+  .quill-window.night {
+    --qp: #12171f; --qp2: #1a212c; --qp3: #0d1219;
+    --qink: #eef1f8; --qink2: #a3adbf; --qink3: #9aa0b4;
+    --qrule: #26303f; --qaccent: #ff6f9c; --qyellow: #ffcf3f;
+    --qcyan: #37d2e4; --qlime: #9ade5c; --qorange: #ff9a52; --qviolet: #a48bff;
+  }
+  .q-frame { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--qp3); border-bottom: 1px solid color-mix(in srgb, var(--qink) 18%, transparent); }
+  .q-dots { display: flex; gap: 6px; }
+  .q-dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .q-dots i:nth-child(1) { background: #e8a09a; }
+  .q-dots i:nth-child(2) { background: #e6c477; }
+  .q-dots i:nth-child(3) { background: #a9cf8f; }
+  .q-title { font-family: "Caveat", cursive; font-size: 22px; font-weight: 700; flex: 1; letter-spacing: .01em; }
+  .night-btn { font-family: inherit; font-size: 13px; color: var(--qink2); background: transparent; border: 1.5px solid color-mix(in srgb, var(--qink) 35%, transparent); border-radius: 8px; padding: 2px 10px; cursor: pointer; }
+  .night-btn:hover { color: var(--qink); }
 
-  .view-live .adbar { background: #f2f2f4; border: 1px dashed #b9b9c0; color: #7a7a83; font-size: 12px; padding: 8px 12px; border-radius: 8px; margin-bottom: 14px; }
-  .view-live .adbar span { text-transform: uppercase; letter-spacing: .1em; opacity: .7; margin-right: 8px; }
-  .art-head h4 { font-family: var(--serif); font-size: 22px; line-height: 1.2; }
-  .art-meta { font-size: 11.5px; color: #9a9aa3; margin: 6px 0 12px; }
-  .vid-thumb { display: flex; align-items: center; gap: 8px; background: #14161c; color: #cfd1d8; font-size: 12px; padding: 26px 14px; border-radius: 8px; margin-bottom: 12px; }
-  .vid-thumb .play { color: var(--accent-soft); }
-  .art-body { font-size: 14.5px; line-height: 1.55; color: #3a3d45; margin: 0 0 12px; }
-  .side { background: #f6f6f8; border: 1px solid #e2e2e8; font-size: 12px; color: #7a7a83; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
-  .cookie { display: flex; align-items: center; gap: 8px; background: #fff8e6; border: 1px solid #ecdca8; font-size: 12px; color: #7a6c2f; padding: 8px 10px; border-radius: 8px; }
-  .cookie button { font: inherit; border: 1px solid #d8c67f; background: #fff; border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+  .q-tabs { position: relative; display: flex; align-items: flex-end; gap: 6px; padding: 12px 14px 0; }
+  .q-tabs::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--qink); }
+  .q-tab { position: relative; z-index: 1; font-size: 15px; color: var(--qink2); padding: 7px 16px 6px; border: 2px solid var(--qink); border-bottom: none; border-radius: 12px 14px 0 0; clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 100%, 0 100%); max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .q-tab.active { color: var(--qink); background: var(--qp); }
+  .q-add { color: var(--qink3); font-size: 18px; padding: 3px 10px 5px; background: transparent; }
 
-  .paper-title { font-family: var(--serif); font-size: 24px; line-height: 1.3; margin-bottom: 8px; }
-  .line { font-size: 14.5px; line-height: 26px; color: var(--ink2); margin: 0; }
-  .sticky { background: var(--accent-soft); border: 1px solid var(--accent); font-size: 12.5px; color: var(--ink); padding: 8px 12px; border-radius: 8px; width: max-content; margin: 16px 0 0 46px; box-shadow: 4px 4px 0 rgba(217, 130, 156, .35); transform: rotate(-1.5deg); }
-  .scribe-chip { position: absolute; right: 24px; bottom: 20px; font-family: var(--serif); font-style: italic; font-size: 12.5px; color: var(--ink3); }
+  .q-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid color-mix(in srgb, var(--qink) 18%, transparent); }
+  .q-ic { font-family: inherit; font-size: 17px; line-height: 1; color: var(--qink2); background: transparent; border: none; cursor: pointer; padding: 2px 5px; }
+  .q-ic:hover { color: var(--qink); }
+  .q-shield.on { color: var(--qcyan); }
+  .q-addr { flex: 1; font-size: 15px; color: var(--qink2); background: var(--qp); border: 1.5px solid var(--qink); border-radius: 14px 12px 16px 12px; padding: 4px 12px; box-shadow: 2px 2px 0 var(--qink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .q-btn-reink { font-family: inherit; font-size: 15px; font-weight: 700; color: #1a2440; background: var(--qyellow); border: 1.5px solid var(--qink); border-radius: 10px; padding: 3px 12px; cursor: pointer; box-shadow: 2px 2px 0 var(--qink); animation: pulseshadow 2.6s ease-in-out infinite; }
+  .q-btn-reink:hover { transform: translateY(-1px); }
+
+  .q-stage { position: relative; height: 460px; background: var(--qp); }
+  .q-view { position: absolute; inset: 0; padding: 26px 30px; overflow: hidden; transition: opacity .5s ease, transform .5s ease; }
+  .view-paper { background: var(--qp); opacity: 0; transform: scale(.985); pointer-events: none; background-image: repeating-linear-gradient(transparent 0 27px, color-mix(in srgb, var(--qrule) 55%, transparent) 27px 28px); }
+  .quill-window.show .view-start { opacity: 0; transform: scale(.985); pointer-events: none; }
+  .quill-window.show .view-paper { opacity: 1; transform: none; pointer-events: auto; }
+
+  .greet { font-family: "Caveat", cursive; }
+  .g-main { display: block; font-size: 40px; font-weight: 700; line-height: 1.02; }
+  .g-sub { font-family: "Patrick Hand", cursive; font-size: 17px; color: var(--qink2); display: block; margin-top: 2px; }
+  .q-search { margin: 24px 0 0; max-width: 430px; font-size: 17px; color: var(--qink2); border: 2px solid var(--qink); border-radius: 16px 14px 18px 14px; padding: 11px 16px; background: var(--qp); box-shadow: 3px 3px 0 var(--qink); }
+  .q-shelf { display: flex; flex-wrap: wrap; gap: 16px; margin: 28px 0 0; }
+  .tile { width: 76px; height: 76px; border-radius: 16px 14px 18px 14px; border: 2px solid var(--qink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 24px; color: var(--qink); box-shadow: 3px 3px 0 rgba(26, 36, 64, 0.25); }
+  .tile span { font-size: 12px; font-family: inherit; color: var(--qink2); }
+  .c-cyan { background: color-mix(in srgb, var(--qcyan) 45%, var(--qp)); }
+  .c-orange { background: color-mix(in srgb, var(--qorange) 42%, var(--qp)); }
+  .c-yellow { background: color-mix(in srgb, var(--qyellow) 55%, var(--qp)); }
+  .c-violet { background: color-mix(in srgb, var(--qviolet) 42%, var(--qp)); }
+  .c-lime { background: color-mix(in srgb, var(--qlime) 48%, var(--qp)); }
+  .c-pink { background: color-mix(in srgb, var(--qaccent) 38%, var(--qp)); }
+  .q-notes { display: flex; flex-wrap: wrap; gap: 16px; margin: 30px 0 0; }
+  .note { font-size: 16px; padding: 10px 14px; border-radius: 4px 16px 6px 18px; box-shadow: 4px 4px 0 rgba(26, 36, 64, 0.14); max-width: 230px; transform: rotate(var(--rot, -1deg)); }
+  .note.n-yellow { background: color-mix(in srgb, var(--qyellow) 72%, white); }
+  .note.n-pink { background: color-mix(in srgb, var(--qaccent) 55%, white); }
+  .note.n-lime { background: color-mix(in srgb, var(--qlime) 55%, white); }
+
+  .paper-title { font-family: "Caveat", cursive; font-size: 32px; font-weight: 700; margin-bottom: 10px; }
+  .line { font-size: 17px; line-height: 27px; color: var(--qink2); margin-top: 4px; }
+
   .demo-hint { text-align: center; font-size: 14px; color: var(--ink2); margin: 18px 0 0; }
   .demo-hint b { color: var(--ink); font-weight: 600; }
+  @keyframes pulseshadow { 0%, 100% { box-shadow: 2px 2px 0 var(--qink), 0 0 0 0 rgba(99, 80, 6, .35); } 50% { box-shadow: 2px 2px 0 var(--qink), 0 0 0 9px rgba(99, 80, 6, 0); } }
 
   @media (max-width: 720px) {
     .features, .shots { grid-template-columns: 1fr; }
@@ -169,37 +209,59 @@
       <p class="relnote"><a href="https://github.com/nimvorodev/quill-browser/releases/tag/v1.0.0">release notes</a></p>
     </section>
 
-    <section class="demo" aria-label="Interactive demo. Re-ink a messy page into a clean paper reader.">
-      <p class="section-label">the whole idea</p>
-      <div class="window">
-        <div class="winbar">
-          <span class="traffic"><i></i><i></i><i></i></span>
-          <span class="url">https://news.example.com/ai-headlines</span>
-          <button class="reink-btn" id="reinkBtn" aria-pressed="false">re-ink this page</button>
+    <section class="demo" aria-label="A faithful mock of the Quill browser app.">
+      <p class="section-label">the whole idea, in the real thing</p>
+      <div class="quill-window" id="qwin">
+        <div class="q-frame">
+          <span class="q-dots"><i></i><i></i><i></i></span>
+          <span class="q-title">Quill</span>
+          <button class="night-btn" id="nightBtn" aria-pressed="false">dark</button>
         </div>
-        <div class="stage" id="demoStage">
-          <div class="view view-live" id="viewLive" aria-hidden="false">
-            <div class="adbar"><span>Sponsored</span> WriteBetter AI: the upgrade your writing deserves</div>
-            <div class="art-head">
-              <h4>How to spot an AI-written headline</h4>
-              <div class="art-meta">by Mariana Vale · 12 min read · 2,114 shares</div>
+
+        <div class="q-tabs">
+          <div class="q-tab active">quill://start</div>
+          <div class="q-tab">read later: a library that survived</div>
+          <div class="q-tab q-add">+</div>
+        </div>
+
+        <div class="q-toolbar">
+          <button class="q-ic" aria-label="back">←</button>
+          <button class="q-ic" aria-label="forward">→</button>
+          <div class="q-addr">quill://start</div>
+          <button class="q-ic" aria-label="bookmark">✦</button>
+          <button class="q-ic q-shield on" aria-label="shields on">◎</button>
+          <button class="q-btn-reink" id="reinkBtn" aria-pressed="false">re-ink</button>
+          <button class="q-ic" aria-label="scribble">✎</button>
+          <button class="q-ic" aria-label="palette">☰</button>
+        </div>
+
+        <div class="q-stage" id="demoStage">
+          <div class="q-view view-start" id="viewStart" aria-hidden="false">
+            <div class="greet"><span class="g-main">Good afternoon</span><span class="g-sub">let’s read something worth reading</span></div>
+            <div class="q-search">search or type a url</div>
+            <div class="q-shelf">
+              <div class="tile c-cyan"><span>◆</span><span>news</span></div>
+              <div class="tile c-orange"><span>▶</span><span>tube</span></div>
+              <div class="tile c-yellow"><span>✎</span><span>scribe</span></div>
+              <div class="tile c-violet"><span>❞</span><span>wiki</span></div>
+              <div class="tile c-lime"><span>⌘</span><span>github</span></div>
+              <div class="tile c-pink"><span>☂</span><span>archive</span></div>
             </div>
-            <div class="vid-thumb"><span class="play">▶</span> Autoplay · trending now · 0:15</div>
-            <p class="art-body">Most readers think they can smell one from a mile away. The tell is rarely the words, and almost always the rhythm.</p>
-            <div class="side">Recommended: 7 quiet habits of calm people (sponsored)</div>
-            <p class="art-body">Scrolling the same page, the layout lurches as banners load in around you. Every scroll becomes a negotiation.</p>
-            <div class="cookie">We use cookies to personalise ads. <button>Accept</button><button>Manage</button></div>
+            <div class="q-notes">
+              <div class="note n-yellow">pinned: the tell is the rhythm</div>
+              <div class="note n-pink" style="--rot:1deg">read next: a library that survived</div>
+            </div>
           </div>
-          <div class="view view-paper" id="viewPaper" aria-hidden="true">
-            <h4 class="paper-title">How to spot an AI-written headline</h4>
-            <p class="line">Most readers think they can smell one from a mile away. The tell is rarely the words, and almost always the rhythm.</p>
-            <p class="line">Scrolling the same page, the layout stays still. Every scroll belongs to you.</p>
-            <div class="sticky">pinned: “the tell is the rhythm.”</div>
-            <span class="scribe-chip">scribe: a quiet summary, right here, offline</span>
+
+          <div class="q-view view-paper" id="viewPaper" aria-hidden="true">
+            <h4 class="paper-title">A library that survived the fire</h4>
+            <p class="line">Every town keeps one building that outlives its purpose. This one held on through war, neglect, and a fire that ate the shelf labels, and still the readers kept coming back.</p>
+            <p class="line">By the time the smoke cleared, the books were soot-stained and the margins were full of notes. Nobody wanted them cleaned. The borrowers were checked back in by their handwriting, not the catalogue.</p>
+            <div class="note n-lime" style="--rot:1deg; margin-top:14px">pinned: “keep the margin notes”</div>
           </div>
         </div>
       </div>
-      <p class="demo-hint">Click <b>re-ink this page</b> and watch the clutter fall away.</p>
+      <p class="demo-hint">Click <b>re-ink</b> to flip from the start page to the reading view, or <b>dark</b> for night mode.</p>
     </section>
 
     <section class="features">
@@ -246,24 +308,30 @@
 </div>
 <script>
   (function () {
-    var stage = document.getElementById("demoStage");
-    var btn = document.getElementById("reinkBtn");
-    var live = document.getElementById("viewLive");
+    var win = document.getElementById("qwin");
+    var reink = document.getElementById("reinkBtn");
+    var night = document.getElementById("nightBtn");
+    var start = document.getElementById("viewStart");
     var paper = document.getElementById("viewPaper");
     var timers = [];
-    function setState(show) {
-      stage.classList.toggle("show-paper", !!show);
-      btn.setAttribute("aria-pressed", String(!!show));
-      btn.textContent = show ? "back to the live site" : "re-ink this page";
-      live.setAttribute("aria-hidden", String(!!show));
+    function setShow(show) {
+      win.classList.toggle("show", !!show);
+      reink.setAttribute("aria-pressed", String(!!show));
+      reink.textContent = show ? "back to start" : "re-ink";
+      start.setAttribute("aria-hidden", String(!!show));
       paper.setAttribute("aria-hidden", String(!show));
     }
-    btn.addEventListener("click", function () {
+    reink.addEventListener("click", function () {
       timers.forEach(clearTimeout);
       timers = [];
-      setState(stage.classList.toggle("show-paper"));
+      setShow(win.classList.toggle("show"));
     });
-    // Once, when scrolled into view, demonstrate the flip on its own.
+    night.addEventListener("click", function () {
+      var n = win.classList.toggle("night");
+      night.setAttribute("aria-pressed", String(n));
+      night.textContent = n ? "light" : "dark";
+    });
+    // Demonstrate the flip once on scroll into view (skip for reduced motion).
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if ("IntersectionObserver" in window) {
       var done = false;
@@ -271,12 +339,12 @@
         entries.forEach(function (e) {
           if (e.isIntersecting && !done) {
             done = true;
-            timers.push(setTimeout(function () { setState(true); }, 400));
-            timers.push(setTimeout(function () { setState(false); }, 2300));
+            timers.push(setTimeout(function () { setShow(true); }, 500));
+            timers.push(setTimeout(function () { setShow(false); }, 2600));
           }
         });
       }, { threshold: 0.35 });
-      io.observe(stage);
+      io.observe(win);
     }
   })();
 </script>
