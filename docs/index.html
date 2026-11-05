@@ -5,159 +5,183 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Quill, the hand-written private browser</title>
 <meta name="description" content="One click turns any page into a quiet paper edition. Read it, mark it up, and keep it. Free, no account, nothing tracks you." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,560;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --paper: #f7f4ea;
-    --paper2: #fbf9f1;
-    --ink: #1f2430;
-    --ink2: #4a4f5c;
-    --ink3: #8a8d98;
-    --rule: rgba(31, 36, 48, 0.14);
-    --yellow: #f4d96a;
-    --lime: #b8e4a0;
-    --cyan: #a5dce8;
-    --pink: #f0b3c3;
+    --paper: #f6f1e4;
+    --paper2: #fbf8ee;
+    --ink: #1c1e26;
+    --ink2: #4c4e58;
+    --ink3: #8b8a91;
+    --rule: rgba(28, 30, 38, 0.12);
+    --accent: #d9829c;
+    --accent-soft: #f4d5de;
+    --shadow: 0 20px 50px -24px rgba(28, 30, 38, 0.35);
+    --serif: "Fraunces", Georgia, "Times New Roman", serif;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
-  .shots { scroll-margin-top: 24px; }
+  .shots { scroll-margin-top: 64px; }
   body {
     background: var(--paper);
+    background-image:
+      radial-gradient(1200px 600px at 80% -10%, rgba(217, 130, 156, 0.10), transparent 60%),
+      repeating-linear-gradient(transparent 0 30px, var(--rule) 30px 31px);
     color: var(--ink);
-    font-family: Georgia, "Times New Roman", serif;
-    line-height: 1.5;
-    /* ruled paper lines */
-    background-image: repeating-linear-gradient(transparent, transparent 30px, var(--rule) 31px);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
   }
-  .page { max-width: 1000px; margin: 0 auto; padding: 48px 32px 64px; }
-  h1 {
-    font-size: 64px; font-weight: 700; letter-spacing: -0.02em;
-    font-family: Georgia, serif;
+  .page { max-width: 1040px; margin: 0 auto; padding: 0 32px; }
+
+  header.site {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 26px 0; border-bottom: 1px solid var(--rule);
   }
-  h1 .dot { color: var(--pink); }
-  .tag { font-size: 20px; font-style: italic; color: var(--ink2); margin: 6px 0 28px; }
-  blockquote.shout {
-    border-left: 3px double var(--ink);
-    background: var(--paper2);
-    padding: 18px 22px; margin: 28px 0 8px;
-    font-size: 22px; font-style: italic; line-height: 1.4;
-  }
+  .wordmark { font-family: var(--serif); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
+  .wordmark .dot { color: var(--accent); }
+  nav.site { display: flex; align-items: center; gap: 22px; }
+  nav.site a { font-size: 14px; font-weight: 500; color: var(--ink2); text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+  nav.site a:hover { color: var(--ink); }
+  nav.site a.cta { color: #fbf8ee; background: var(--ink); padding: 10px 18px; border-radius: 10px; font-weight: 600; transition: transform .16s ease, box-shadow .16s ease; box-shadow: 0 10px 22px -14px rgba(28,30,38,.7); }
+  nav.site a.cta:hover { transform: translateY(-1px); color: #fbf8ee; }
+  .gh-icon { width: 16px; height: 16px; }
+
+  main { padding: 72px 0 8px; }
+  .hero { max-width: 860px; }
+  .kicker { font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink3); margin-bottom: 18px; }
+  h1 { font-family: var(--serif); font-weight: 560; font-size: clamp(40px, 6vw, 72px); line-height: 1.04; letter-spacing: -0.02em; text-wrap: balance; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .lede { font-family: var(--serif); font-style: italic; font-size: clamp(19px, 2.4vw, 25px); color: var(--ink2); margin-top: 18px; max-width: 60ch; }
+  .promise { margin-top: 22px; font-size: 17px; color: var(--ink); max-width: 52ch; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 34px; }
   .btn {
-    display: inline-block; margin: 30px 0 10px; padding: 14px 26px;
-    background: var(--yellow); color: #12171f; font-weight: 700; font-size: 19px;
-    border: 2px solid var(--ink); border-radius: 14px 12px 16px 12px;
-    box-shadow: 4px 4px 0 var(--ink); text-decoration: none; cursor: pointer;
+    display: inline-block; padding: 15px 26px; font-size: 16px; font-weight: 600;
+    background: var(--ink); color: #fbf8ee; border-radius: 12px; text-decoration: none;
+    box-shadow: var(--shadow); transition: transform .18s ease, box-shadow .18s ease;
   }
-  .btn span { font-weight: 400; font-style: italic; font-size: 15px; }
-  .trust { font-size: 14px; color: var(--ink3); margin: 12px 0 6px; letter-spacing: 0.05em; }
-  .diff { font-size: 17px; color: var(--ink2); margin: 18px 0 4px; }
-  .relnote { margin: 6px 0 0; font-size: 13.5px; }
-  .relnote a { color: var(--ink2); text-decoration: underline; }
-  .blurbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 22px; margin: 44px 0; }
-  .card {
-    background: var(--paper2); border: 2px solid var(--ink);
-    border-radius: 12px 14px 12px 14px; padding: 22px 24px;
-    box-shadow: 3px 3px 0 rgba(31,36,48,0.18);
+  .btn:hover { transform: translateY(-2px); }
+  .btn-ghost {
+    display: inline-block; padding: 15px 24px; font-size: 16px; font-weight: 500;
+    color: var(--ink); border: 1.5px solid var(--ink); border-radius: 12px; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: background .18s ease, transform .18s ease;
   }
-  .card h3 { font-size: 20px; margin-bottom: 8px; }
-  .card p { color: var(--ink2); font-size: 16px; }
-  .card .mark { color: var(--ink3); }
-  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 22px; margin: 40px 0 0; }
-  .shot { background: var(--paper2); border: 2px solid var(--ink); border-radius: 12px 14px 12px 14px; padding: 10px; box-shadow: 3px 3px 0 rgba(31,36,48,0.18); }
+  .btn-ghost:hover { background: rgba(28, 30, 38, 0.05); transform: translateY(-2px); }
+  .relnote { margin-top: 18px; font-size: 13.5px; }
+  .relnote a { color: var(--ink3); text-decoration: underline; }
+  .relnote a:hover { color: var(--ink); }
+
+  .features { margin: 96px 0 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 44px; border-top: 1px solid var(--rule); padding-top: 64px; }
+  .feature { padding: 26px 0 6px; }
+  .feature .num { font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .06em; }
+  .feature h3 { font-family: var(--serif); font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 10px 0 8px; }
+  .feature p { color: var(--ink2); font-size: 15.5px; max-width: 46ch; }
+
+  .shots { margin: 88px 0 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; border-top: 1px solid var(--rule); padding-top: 64px; }
+  .shot { background: var(--paper2); border: 1px solid var(--rule); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
   .shot a { display: block; }
-  .shot img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; cursor: zoom-in; }
-  .shot a:hover img { opacity: .9; }
-  .shot figcaption { font-size: 13px; color: var(--ink3); text-align: center; padding: 8px 4px 0; }
+  .shot img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; cursor: zoom-in; transition: transform .22s ease, opacity .22s ease; }
+  .shot a:hover img { transform: scale(1.015); opacity: .96; }
+  .shot figcaption { font-size: 13.5px; color: var(--ink3); text-align: center; padding: 12px 6px 2px; }
 
-  /* entrance cascade */
-  @keyframes quillUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-  h1, .tag, blockquote.shout, .diff, .trust, .card, footer {
-    animation: quillUp .7s cubic-bezier(.2, .7, .3, 1) backwards;
+  .section-label { grid-column: 1 / -1; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink3); margin-bottom: 4px; }
+
+  footer {
+    margin-top: 96px; padding: 40px 0 56px; border-top: 1px solid var(--rule);
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    font-size: 14px; color: var(--ink3);
   }
-  h1 { animation-delay: .05s; }
-  .tag { animation-delay: .18s; }
-  blockquote.shout { animation-delay: .26s; }
-  .diff { animation-delay: .34s; }
-  .trust { animation-delay: .5s; }
-  .card:nth-child(1) { animation-delay: .6s; }
-  .card:nth-child(2) { animation-delay: .68s; }
-  .card:nth-child(3) { animation-delay: .76s; }
-  .card:nth-child(4) { animation-delay: .84s; }
-  .shots { animation: quillUp .7s .95s backwards; }
-  footer { animation-delay: 1.05s; }
+  footer .wordmark { font-size: 20px; }
+  footer a { color: var(--ink3); text-decoration: none; }
+  footer a:hover { color: var(--ink); }
+  footer .links { display: flex; gap: 22px; }
 
-  /* paper-lift hover */
-  .card, .shot { transition: transform .18s ease, box-shadow .18s ease; }
-  .card:hover, .shot:hover { transform: translateY(-3px); box-shadow: 5px 5px 0 rgba(31, 36, 48, 0.22); }
-
-  /* download button: gentle float to draw the eye */
-  @keyframes quillBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-  .btn {
-    animation: quillUp .7s .42s backwards, quillBob 3.2s 1.8s ease-in-out infinite;
-    transition: box-shadow .18s ease, background .18s ease;
+  @media (max-width: 720px) {
+    .features, .shots { grid-template-columns: 1fr; }
+    .feature p { max-width: none; }
+    main { padding-top: 48px; }
+    .actions { flex-direction: column; align-items: stretch; }
+    .btn, .btn-ghost { text-align: center; justify-content: center; }
   }
-  .btn:hover { box-shadow: 6px 6px 0 var(--ink); animation-play-state: paused; }
-
-  /* screenshot warm-zoom */
-  .shot img { transition: transform .2s ease; }
-  .shot a:hover img { transform: scale(1.03); }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
-  footer { margin-top: 46px; padding-top: 18px; border-top: 2px dashed var(--ink); color: var(--ink3); font-size: 13.5px; text-align: center; }
 </style>
 </head>
 <body>
 <div class="page">
-  <h1>Quill<span class="dot">.</span></h1>
-  <div class="tag">the hand-written private browser</div>
+  <header class="site">
+    <a class="wordmark" href="#top">Quill<span class="dot">.</span></a>
+    <nav class="site">
+      <a href="https://github.com/nimvorodev/quill-browser" target="_blank" rel="noopener">
+        <svg class="gh-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <a class="cta" href="https://github.com/nimvorodev/quill-browser/releases/download/v1.0.0/Quill-Setup-1.0.0.exe">Download</a>
+    </nav>
+  </header>
 
-  <blockquote class="shout">
-    Reading the web should feel like reading. Not dodging pop-ups while an ad reshuffles the page.
-  </blockquote>
+  <main id="top">
+    <section class="hero">
+      <p class="kicker">the hand-written private browser</p>
+      <h1>Reading the web should <em>feel like reading</em>.</h1>
+      <p class="lede">Not dodging pop-ups while an ad reshuffles the page under your cursor.</p>
+      <p class="promise">One click turns any page into a quiet paper edition you can read, mark up, and keep. No account, nothing tracks you.</p>
+      <div class="actions">
+        <a class="btn" href="https://github.com/nimvorodev/quill-browser/releases/download/v1.0.0/Quill-Setup-1.0.0.exe">Download for Windows</a>
+        <a class="btn-ghost" href="https://github.com/nimvorodev/quill-browser" target="_blank" rel="noopener">
+          <svg class="gh-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <p class="relnote"><a href="https://github.com/nimvorodev/quill-browser/releases/tag/v1.0.0">release notes</a></p>
+    </section>
 
-  <p class="diff">
-    One click turns any page into a quiet paper edition you can read, mark up, and keep. No account, nothing tracks you.
-  </p>
+    <section class="features">
+      <p class="section-label">why it's different</p>
+      <div class="feature">
+        <span class="num">01</span>
+        <h3>read it like paper</h3>
+        <p>Click re-ink and the pop-ups, banners and autoplay videos fall away. What stays is clean type on ruled paper. Split it beside the real page or keep the quiet one; Quill remembers your pick for every site.</p>
+      </div>
+      <div class="feature">
+        <span class="num">02</span>
+        <h3>write on it</h3>
+        <p>Highlight a passage and pin it as a note. Scribble with a marker and keep the doodle. Sticky notes float over everything you're doing. The web stops being something you watch and becomes something you use.</p>
+      </div>
+      <div class="feature">
+        <span class="num">03</span>
+        <h3>keep what you find</h3>
+        <p>Ghost tabs browse without a trace, and a read-later queue holds the good stuff on your start page. Pinned passages and sticky notes stay put. Everything lives on your machine, because there's no cloud to lose it in.</p>
+      </div>
+      <div class="feature">
+        <span class="num">04</span>
+        <h3>a scribe in the margin</h3>
+        <p>Summarize or translate any page offline, with no account. The built-in scribe reads alongside you, and your text never leaves your machine.</p>
+      </div>
+    </section>
 
-  <a class="btn" href="https://github.com/nimvorodev/quill-browser/releases/download/v1.0.0/Quill-Setup-1.0.0.exe"><span>download for windows</span></a>
-  <p class="relnote"><a href="https://github.com/nimvorodev/quill-browser/releases/tag/v1.0.0">release notes</a></p>
-  <div class="trust">free, no account, no telemetry, works offline</div>
-
-  <div class="blurbs">
-
-    <div class="card" id="reink">
-      <h3>read it like paper.</h3>
-      <p>Click re-ink and the pop-ups, banners and autoplay videos fall away. What stays is clean type on ruled paper. Split it beside the real page or keep the quiet one; Quill remembers your pick for every site.</p>
-    </div>
-
-    <div class="card" id="write">
-      <h3>write on it.</h3>
-      <p>Highlight a passage and pin it as a note. Scribble with a marker and keep the doodle. Sticky notes float over everything you're doing. The web stops being something you watch and becomes something you use.</p>
-    </div>
-
-    <div class="card" id="keep">
-      <h3>keep what you find.</h3>
-      <p>Ghost tabs browse without a trace, and a read-later queue holds the good stuff on your start page. Pinned passages and sticky notes stay put. Everything lives on your machine, because there's no cloud to lose it in.</p>
-    </div>
-
-    <div class="card" id="ai">
-      <h3>a scribe in the margin.</h3>
-      <p>Summarize or translate any page offline, with no account. The built-in scribe reads alongside you, and your text never leaves your machine.</p>
-    </div>
-
-  </div>
-
-  <div class="shots" id="shots">
-    <figure class="shot"><a href="img/homepage.png" target="_blank" rel="noopener" title="open full size"><img src="img/homepage.png" alt="The Quill start page, notes and read-later on paper" /></a><figcaption>the start page. your notes and read-later.</figcaption></figure>
-    <figure class="shot"><a href="img/reinked.png" target="_blank" rel="noopener" title="open full size"><img src="img/reinked.png" alt="An article re-inked into a clean paper page" /></a><figcaption>an article, re-inked into paper.</figcaption></figure>
-    <figure class="shot"><a href="img/scribble.png" target="_blank" rel="noopener" title="open full size"><img src="img/scribble.png" alt="Marking up a page with the pen" /></a><figcaption>mark it up, keep the doodle.</figcaption></figure>
-    <figure class="shot"><a href="img/tubedesk.png" target="_blank" rel="noopener" title="open full size"><img src="img/tubedesk.png" alt="Video running in its own desk while you work" /></a><figcaption>video in its own desk, ad-free, while you work.</figcaption></figure>
-  </div>
+    <section class="shots" id="shots">
+      <p class="section-label">it looks like this</p>
+      <figure class="shot"><a href="img/homepage.png" target="_blank" rel="noopener" title="open full size"><img src="img/homepage.png" alt="The Quill start page, notes and read-later on paper" /></a><figcaption>the start page. your notes and read-later.</figcaption></figure>
+      <figure class="shot"><a href="img/reinked.png" target="_blank" rel="noopener" title="open full size"><img src="img/reinked.png" alt="An article re-inked into a clean paper page" /></a><figcaption>an article, re-inked into paper.</figcaption></figure>
+      <figure class="shot"><a href="img/scribble.png" target="_blank" rel="noopener" title="open full size"><img src="img/scribble.png" alt="Marking up a page with the pen" /></a><figcaption>mark it up, keep the doodle.</figcaption></figure>
+      <figure class="shot"><a href="img/tubedesk.png" target="_blank" rel="noopener" title="open full size"><img src="img/tubedesk.png" alt="Video running in its own desk while you work" /></a><figcaption>video in its own desk, ad-free, while you work.</figcaption></figure>
+    </section>
+  </main>
 
   <footer>
-    Quill is free, open source, and built for people who read on the web. If that's you, it's worth the ten seconds to try.
+    <a class="wordmark" href="#top">Quill<span class="dot">.</span></a>
+    <span>Free and open source under the Mozilla Public License 2.0.</span>
+    <div class="links">
+      <a href="https://github.com/nimvorodev/quill-browser" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/nimvorodev/quill-browser/releases/tag/v1.0.0">v1.0.0</a>
+    </div>
   </footer>
 </div>
 </body>
