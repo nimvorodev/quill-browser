@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quill — the hand-written private browser</title>
+<meta name="description" content="A private browser that reads like a paper notebook — re-ink any page, scribble on it, and nothing tracks you." />
+<style>
+  :root {
+    --paper: #f7f4ea;
+    --paper2: #fbf9f1;
+    --ink: #1f2430;
+    --ink2: #4a4f5c;
+    --ink3: #8a8d98;
+    --rule: rgba(31, 36, 48, 0.14);
+    --yellow: #f4d96a;
+    --lime: #b8e4a0;
+    --cyan: #a5dce8;
+    --pink: #f0b3c3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.5;
+    /* ruled paper lines */
+    background-image: repeating-linear-gradient(transparent, transparent 30px, var(--rule) 31px);
+  }
+  .page { max-width: 760px; margin: 0 auto; padding: 48px 28px 64px; }
+  .topbar { font-size: 13px; color: var(--ink2); letter-spacing: 0.18em; text-transform: lowercase; margin-bottom: 40px; display:flex; gap:16px; }
+  .topbar a { color: var(--ink2); }
+  h1 {
+    font-size: 64px; font-weight: 700; letter-spacing: -0.02em;
+    font-family: Georgia, serif;
+  }
+  h1 .dot { color: var(--pink); }
+  .tag { font-size: 20px; font-style: italic; color: var(--ink2); margin: 6px 0 28px; }
+  blockquote.shout {
+    border-left: 3px double var(--ink);
+    background: var(--paper2);
+    padding: 18px 22px; margin: 28px 0 8px;
+    font-size: 22px; font-style: italic; line-height: 1.4;
+  }
+  .btn {
+    display: inline-block; margin: 30px 0 10px; padding: 14px 26px;
+    background: var(--yellow); color: #12171f; font-weight: 700; font-size: 19px;
+    border: 2px solid var(--ink); border-radius: 14px 12px 16px 12px;
+    box-shadow: 4px 4px 0 var(--ink); text-decoration: none; cursor: pointer;
+  }
+  .btn span { font-weight: 400; font-style: italic; font-size: 15px; }
+  .trust { font-size: 14px; color: var(--ink3); margin: 12px 0 6px; letter-spacing: 0.05em; }
+  .blurbs { display: grid; gap: 22px; margin: 44px 0; }
+  .card {
+    background: var(--paper2); border: 2px solid var(--ink);
+    border-radius: 12px 14px 12px 14px; padding: 22px 24px;
+    box-shadow: 3px 3px 0 rgba(31,36,48,0.18);
+  }
+  .card h3 { font-size: 20px; margin-bottom: 8px; }
+  .card p { color: var(--ink2); font-size: 16px; }
+  .card .mark { color: var(--ink3); }
+  footer { margin-top: 46px; padding-top: 18px; border-top: 2px dashed var(--ink); color: var(--ink3); font-size: 13.5px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar"><span>quill</span><a href="#reink">the reading</a><a href="#privacy">the shield</a><a href="#desks">the desks</a><a href="#tools">the tools</a></div>
+
+  <h1>Quill<span class="dot">.</span></h1>
+  <div class="tag">the hand-written private browser</div>
+
+  <blockquote class="shout">
+    A private browser that reads like a paper notebook — re-ink any page, scribble on it, and nothing tracks you.
+  </blockquote>
+
+  <a class="btn" href="#">download for windows <span>· free</span></a>
+  <div class="trust">no account &nbsp;·&nbsp; no telemetry &nbsp;·&nbsp; works offline</div>
+
+  <div class="blurbs">
+
+    <div class="card" id="reink">
+      <h3>re-ink anything.</h3>
+      <p>One tap turns any article into a paper page. Split it side-by-side with the real site, or go full notebook — and the choice sticks per site, so your favorite reads always open as paper.</p>
+    </div>
+
+    <div class="card" id="privacy">
+      <h3>the web, minus the noise.</h3>
+      <p>Ads, trackers and social widgets are stripped before they load — at the network layer, not hidden with CSS. The ledger shows every request that died, and any site is one click from forgiven. Ghost tabs leave no history at all.</p>
+    </div>
+
+    <div class="card" id="desks">
+      <h3>a desk for everything.</h3>
+      <p>YouTube plays ad-free in its own desk while you keep browsing. GitHub repos render as clean paper. And an offline AI sits in the margin — it summarizes and translates any page with zero setup, zero network, zero accounts.</p>
+    </div>
+
+    <div class="card" id="tools">
+      <h3>tools that feel like paper.</h3>
+      <p>Scribble over any page with a marker and save it as a PNG. Pin sticky notes to your screen. Tear off ghost tabs that leave no history. Focus mode hides all the chrome until only the words are left.</p>
+    </div>
+
+  </div>
+
+  <footer>
+    Quill is free, and it stays that way. Your bookmarks, history and notes live on your machine — in the app, nowhere else.
+  </footer>
+</div>
+</body>
+</html>
