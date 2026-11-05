@@ -21,16 +21,16 @@ lifting. No account. Nothing tracks you.
   Scribble with a marker and keep the doodle. Sticky notes float over the
   whole window. The web stops being something you watch and becomes
   something you use.
-- **Your video keeps playing.** YouTube runs in its own desk while you work,
-  and GitHub repos read like paper. Bang shortcuts take you straight to what
-  you meant: `!yt lofi`, `!w rust`, `!gh tokio`.
+- **Keep what you find.** Ghost tabs browse without leaving a trace, and a
+  read-later queue holds the good stuff on your start page. Pinned passages
+  and sticky notes stay put. Everything lives on your machine, because
+  there's no cloud to lose it in.
 - **A scribe in the margin, off the network.** Summarize or translate any
   page with no account and no internet. Point it at Ollama or any
   compatible model; your text never leaves your machine.
 - **Privacy that holds up.** Ads, trackers and social widgets are stopped at
   the network layer before they load, not hidden with CSS. Ghost tabs leave
   no history at all.
-- **PDFs and images** open natively in the viewer, no relay round-trip.
 
 ## Getting started
 
