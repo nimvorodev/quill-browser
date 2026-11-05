@@ -1,3 +1,5 @@
+![Quill banner](build/banner.jpg)
+
 # Quill
 
 ### the hand-written private browser
