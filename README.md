@@ -1,38 +1,40 @@
-# Quill — the hand-written private browser
+# Quill
 
-A desktop browser that looks like a paper notebook. Electron + React, with
-network-level ad/tracker blocking, a re-inked reader mode, special desks for
-YouTube and GitHub, and an offline-first AI side panel.
+### the hand-written private browser
 
-![platform](https://img.shields.io/badge/platform-windows-blue) ![stack](https://img.shields.io/badge/stack-Electron%20%C2%B7%20React%2019%20%C2%B7%20Vite%207%20%C2%B7%20Tailwind%204-informational)
+> A private browser that reads like a paper notebook — re-ink any page,
+> scribble on it, and nothing tracks you.
+
+![platform](https://img.shields.io/badge/platform-windows-blue) ![stack](https://img.shields.io/badge/stack-Electron%20%C2%B7%20React%2019%20%C2%B7%20Vite%207%20%C2%B7%20Tailwind%204-informational) ![privacy](https://img.shields.io/badge/telemetry-none-success)
+
+Every page you open becomes a page worth reading. Tap **re-ink** and any
+website — news, docs, a 4,000-word essay — is rewritten in your notebook:
+clean type on ruled paper, no clutter, no pop-ups, no ads.
 
 ## What it does
 
-- **The real site first** — pages open as themselves, with ads, trackers and
-  social widgets stripped at the network layer from a filter list of hosts.
-  Tap **re-ink** for a clean, notebook-styled reader copy, or split the two
-  side by side.
-- **Webview scriptlets at document-start** — the popup gate and YouTube
-  ad scrub (incl. display-ad hiding) are injected into the page's main world
-  via the DevTools protocol before the site's own scripts run. The injected
-  code is pure JS holding zero authority; every real rule (network blocking,
-  popup filtering) is enforced in the main process.
-- **Search your way** — DuckDuckGo, Google, Bing, Brave, Startpage, Mojeek
-  and Ecosia open their real results pages inside Quill, shielded. Wikipedia
-  and Mwmbl render in-app from their public APIs. Bang shortcuts work
-  everywhere: `!yt lofi`, `!w rust`, `!gh tokio`, `!mdn fetch`.
-- **The tube desk** — YouTube plays through a privacy embed that keeps
-  playing while you switch tabs, with related videos, autoplay and its own
-  desk UI. The real YouTube page gets ad placements stripped, too.
-- **The GitHub desk** — repos, READMEs and issues re-rendered from the
-  public API.
-- **AI margin** — a built-in offline Scribe summarises any page with zero
-  setup and zero network. Or point it at Ollama / LM Studio / any
-  OpenAI-compatible endpoint; the key never leaves localStorage.
-- **Paper-desk tools** — scribble over any page with a marker and save the
-  result as a PNG, sticky notes that float over the whole window, ghost tabs
-  that leave no history, a command palette (Ctrl+K), and a downloads drawer
-  with live progress.
+- **re-ink anything.** One tap turns any article into a paper page. Split it
+  side-by-side with the real site, or go full notebook — and the choice
+  sticks per site, so your favorite reads always open as paper. Wikipedia and
+  Mwmbl render in-app from their public APIs; the rest of the web opens as
+  itself first.
+- **the web, minus the noise.** Ads, trackers and social widgets are stripped
+  before they load — at the network layer, not hidden with CSS. The ledger
+  shows every request that died, and any site is one click from forgiven.
+  Ghost tabs leave no history at all.
+- **a desk for everything.** YouTube plays ad-free in its own desk while you
+  keep browsing; GitHub repos render as clean paper; DuckDuckGo, Google,
+  Bing, Brave, Startpage, Mojeek and Ecosia open their real results pages
+  inside Quill, shielded — with bang shortcuts everywhere: `!yt lofi`,
+  `!w rust`, `!gh tokio`, `!mdn fetch`.
+- **an offline AI in the margin.** A built-in Scribe summarises and
+  translates any page with zero setup, zero network, zero accounts. Or point
+  it at Ollama / LM Studio / any OpenAI-compatible endpoint; the key never
+  leaves localStorage.
+- **tools that feel like paper.** Scribble over any page with a marker and
+  save the result as a PNG. Sticky notes float over the whole window. Focus
+  mode hides all the chrome until only the words are left. Command palette
+  (Ctrl+K), downloads with pause/resume, read-later queue on the start page.
 - **PDFs and images** open natively in the viewer, no relay round-trip.
 
 ## Getting started
