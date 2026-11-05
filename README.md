@@ -9,7 +9,7 @@
 
 ![platform](https://img.shields.io/badge/platform-windows-blue) ![stack](https://img.shields.io/badge/stack-Electron%20%C2%B7%20React%2019%20%C2%B7%20Vite%207%20%C2%B7%20Tailwind%204-informational) ![privacy](https://img.shields.io/badge/telemetry-none-success)
 
-**Download:** [Quill 1.0 for Windows](https://github.com/nimvorodev/quill-browser/releases/download/v1.0.0/Quill-Setup-1.0.0.exe) (Windows 10/11, x64).
+**Download:** [Quill 1.0 for Windows](https://github.com/nimvorodev/quill-browser/releases/download/v1.0.0/Quill-Setup-1.0.0.exe) (Windows 10/11, x64). **Screenshots:** [see the app in action](https://nimvorodev.github.io/quill-browser/#shots).
 
 One click turns any article into a quiet paper page you can actually read.
 Mark it up, pin the good parts, and let a scribe in the margin do the heavy

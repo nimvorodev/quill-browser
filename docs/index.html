@@ -62,9 +62,11 @@
   .card h3 { font-size: 20px; margin-bottom: 8px; }
   .card p { color: var(--ink2); font-size: 16px; }
   .card .mark { color: var(--ink3); }
-  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; margin: 40px 0 0; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; margin: 40px 0 0; }
   .shot { background: var(--paper2); border: 2px solid var(--ink); border-radius: 12px 14px 12px 14px; padding: 10px; box-shadow: 3px 3px 0 rgba(31,36,48,0.18); }
-  .shot img { width: 100%; height: 230px; object-fit: contain; background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; }
+  .shot a { display: block; }
+  .shot img { width: 100%; height: 320px; object-fit: contain; background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; cursor: zoom-in; }
+  .shot a:hover img { opacity: .9; }
   .shot figcaption { font-size: 13px; color: var(--ink3); text-align: center; padding: 8px 4px 0; }
   footer { margin-top: 46px; padding-top: 18px; border-top: 2px dashed var(--ink); color: var(--ink3); font-size: 13.5px; text-align: center; }
 </style>
@@ -112,11 +114,11 @@
 
   </div>
 
-  <div class="shots">
-    <figure class="shot"><img src="img/homepage.png" alt="The Quill start page, notes and read-later on paper" /><figcaption>the start page. your notes and read-later.</figcaption></figure>
-    <figure class="shot"><img src="img/reinked.png" alt="An article re-inked into a clean paper page" /><figcaption>an article, re-inked into paper.</figcaption></figure>
-    <figure class="shot"><img src="img/scribble.png" alt="Marking up a page with the pen" /><figcaption>mark it up, keep the doodle.</figcaption></figure>
-    <figure class="shot"><img src="img/tubedesk.png" alt="Video running in its own desk while you work" /><figcaption>video in its own desk, ad-free, while you work.</figcaption></figure>
+  <div class="shots" id="shots">
+    <figure class="shot"><a href="img/homepage.png" target="_blank" rel="noopener" title="open full size"><img src="img/homepage.png" alt="The Quill start page, notes and read-later on paper" /></a><figcaption>the start page. your notes and read-later.</figcaption></figure>
+    <figure class="shot"><a href="img/reinked.png" target="_blank" rel="noopener" title="open full size"><img src="img/reinked.png" alt="An article re-inked into a clean paper page" /></a><figcaption>an article, re-inked into paper.</figcaption></figure>
+    <figure class="shot"><a href="img/scribble.png" target="_blank" rel="noopener" title="open full size"><img src="img/scribble.png" alt="Marking up a page with the pen" /></a><figcaption>mark it up, keep the doodle.</figcaption></figure>
+    <figure class="shot"><a href="img/tubedesk.png" target="_blank" rel="noopener" title="open full size"><img src="img/tubedesk.png" alt="Video running in its own desk while you work" /></a><figcaption>video in its own desk, ad-free, while you work.</figcaption></figure>
   </div>
 
   <footer>
