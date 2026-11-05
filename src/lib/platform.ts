@@ -14,7 +14,7 @@ export interface DownloadItem {
   path: string;
   received: number;
   total: number;
-  state: "downloading" | "completed" | "cancelled" | "interrupted";
+  state: "downloading" | "paused" | "completed" | "cancelled" | "interrupted";
 }
 
 export interface DesktopBridge {
@@ -52,6 +52,20 @@ export interface DesktopBridge {
   saveHtml(html: string, name: string): Promise<boolean>;
   /** Toggle app fullscreen (F11). */
   toggleFullscreen(): Promise<boolean>;
+  /** Open the OS print dialog for a webview page. */
+  printPage(webContentsId: number): Promise<boolean>;
+  /** Open a local file (system picker); returns the chosen path or null. */
+  openFile(): Promise<string | null>;
+  /** Open another Quill window (skips session restore). */
+  newWindow(): void;
+  /** Pause / resume / cancel an in-flight download by drawer id. */
+  dlControl(id: string, action: "pause" | "resume" | "cancel"): void;
+  /** Push per-site permission grants { host: [permission] } to the main process. */
+  setPermRules(rules: Record<string, string[]>): void;
+  /** Answer a permission prompt; `always` persists the grant for the host. */
+  permRespond(id: string, allow: boolean, always: boolean, host: string, permission: string): Promise<boolean>;
+  /** A site asked for camera/mic/location/notifications. */
+  onPermRequest(cb: (req: { id: string; host: string; permission: string }) => void): () => void;
   /** Download progress from both the webviews and the renderer itself. */
   onDownload(cb: (item: DownloadItem) => void): () => void;
   /** Request desktop webview partition name (persisted, isolated from app). */

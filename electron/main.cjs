@@ -37,6 +37,27 @@ if (dohEnabled()) {
 
 /** @type {BrowserWindow | null} */
 let win = null;
+/** Every live app window — downloads and saves broadcast to all of them. */
+const wins = new Set();
+// Permissions granted per host: host -> Set(permission). Persisted by the
+// renderer; pushed here on boot and on every change.
+const permRules = new Map();
+// Unanswered permission prompts: id -> { cb, timer }.
+const pendingPerms = new Map();
+const PERM_AUTO = new Set(["fullscreen", "clipboard-sanitized-write", "pointerLock"]);
+// Only these ever prompt — everything else is denied without asking.
+const PERM_PROMPTABLE = new Set(["media", "geolocation", "notifications", "midi"]);
+function sendAll(channel, payload) {
+  for (const w of wins) {
+    try {
+      w.webContents.send(channel, payload);
+    } catch {
+      /* window closing */
+    }
+  }
+}
+/** The window a menu accelerator should act on. */
+const focusedWin = () => BrowserWindow.getFocusedWindow() || win;
 /** @type {Set<string>} */
 let blockHosts = new Set();
 let blockEnabled = true;
@@ -104,6 +125,9 @@ const rememberDownload = (p) => {
 // a second save dialog.
 const pendingDlUrls = new Set();
 
+// Downloads currently in flight, keyed by drawer id — pause/resume/cancel.
+const dlItems = new Map();
+
 function wireDownloads(ses) {
   ses.on("will-download", (e, item) => {
     const dlUrl = item.getURL();
@@ -150,13 +174,15 @@ function wireDownloads(ses) {
 async function trackDownload(item, dlUrl) {
   const file = path.basename(item.getFilename() || "download");
   const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: file, path: "", received: 0, total: item.getTotalBytes(), state: "downloading" };
-  const push = () => win?.webContents.send("quill:download", { ...state });
+  const push = () => sendAll("quill:download", { ...state });
+  dlItems.set(state.id, { item, mark: (s) => { state.state = s; push(); } });
   push();
   item.on("updated", () => {
     state.received = item.getReceivedBytes();
     push();
   });
   item.once("done", (_ev, s) => {
+    dlItems.delete(state.id);
     state.received = item.getReceivedBytes();
     state.state = s === "completed" ? "completed" : s;
     try {
@@ -191,7 +217,8 @@ async function placeDownload(item, dlUrl) {
     rememberDownload(savePath);
     const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: path.basename(savePath), path: savePath, received: 0, total: item.getTotalBytes(), state: "downloading" };
     item.setSavePath(savePath);
-    const push = () => win?.webContents.send("quill:download", { ...state });
+    const push = () => sendAll("quill:download", { ...state });
+    dlItems.set(state.id, { item, mark: (s) => { state.state = s; push(); } });
     push();
     item.on("updated", (_ev, s) => {
       state.received = item.getReceivedBytes();
@@ -199,6 +226,7 @@ async function placeDownload(item, dlUrl) {
       push();
     });
     item.once("done", (_ev, s) => {
+      dlItems.delete(state.id);
       state.received = item.getReceivedBytes();
       state.state = s === "completed" ? "completed" : s;
       push();
@@ -232,12 +260,38 @@ function installNetworkFilter() {
   const chromeUA = ses.getUserAgent().replace(/\s?Electron\/\S+/, "").replace(/\s?quill\S*\/\S+/i, "");
   ses.setUserAgent(chromeUA);
 
-  // Permission prompts default to deny for web content; no silent camera/mic/geo.
-  ses.setPermissionRequestHandler((_wc, permission, cb) => {
-    const allow = permission === "fullscreen" || permission === "clipboard-sanitized-write";
-    cb(allow);
+  // Permission posture: a few safe things are auto-allowed, everything else
+  // needs an explicit per-site grant — the renderer shows a prompt banner and
+  // pushes the saved rules back here (it persists them in localStorage).
+  ses.setPermissionRequestHandler((wc, permission, cb) => {
+    if (PERM_AUTO.has(permission)) return cb(true);
+    if (!PERM_PROMPTABLE.has(permission)) return cb(false);
+    let host = "";
+    try {
+      host = new URL(wc.getURL()).hostname;
+    } catch {
+      /* about:blank — no host, deny */
+    }
+    if (host && permRules.get(host)?.has(permission)) return cb(true);
+    const w = BrowserWindow.fromWebContents(wc.hostWebContents || wc);
+    if (!w || !host) return cb(false);
+    const id = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    // Chrome-style: an unanswered prompt auto-denies after 30s.
+    const timer = setTimeout(() => {
+      if (pendingPerms.delete(id)) cb(false);
+    }, 30000);
+    pendingPerms.set(id, { cb, timer });
+    w.webContents.send("quill:perm-request", { id, host, permission });
   });
-  ses.setPermissionCheckHandler((_wc, permission) => permission === "fullscreen" || permission === "clipboard-sanitized-write");
+  ses.setPermissionCheckHandler((wc, permission) => {
+    if (PERM_AUTO.has(permission)) return true;
+    try {
+      const host = new URL(wc.getURL()).hostname;
+      return Boolean(host && permRules.get(host)?.has(permission));
+    } catch {
+      return false;
+    }
+  });
 
   // YouTube's embed player (since July 2025) rejects requests that carry no HTTP
   // Referer with player error 153. The packaged app loads its renderer from
@@ -251,8 +305,8 @@ function installNetworkFilter() {
   });
 }
 
-function createWindow() {
-  win = new BrowserWindow({
+function createWindow(fresh = false) {
+  const w = new BrowserWindow({
     width: 1320,
     height: 860,
     minWidth: 760,
@@ -276,25 +330,31 @@ function createWindow() {
     },
   });
 
-  win.once("ready-to-show", () => win?.show());
-  win.on("maximize", () => win?.webContents.send("quill:maximized", true));
-  win.on("unmaximize", () => win?.webContents.send("quill:maximized", false));
-  win.on("closed", () => {
-    win = null;
+  wins.add(w);
+  // `win` stays "the last created window" — a fallback for legacy
+  // single-window paths; everything user-facing uses the sender's window.
+  win = w;
+
+  w.once("ready-to-show", () => w.show());
+  w.on("maximize", () => w.webContents.send("quill:maximized", true));
+  w.on("unmaximize", () => w.webContents.send("quill:maximized", false));
+  w.on("closed", () => {
+    wins.delete(w);
+    if (win === w) win = null;
   });
 
   // The app window may only ever show the bundled app.
   const appUrl = isDev ? process.env.VITE_DEV_SERVER_URL : `file://${path.join(__dirname, "..", "dist", "index.html")}`;
-  win.webContents.on("will-navigate", (e, url) => {
+  w.webContents.on("will-navigate", (e, url) => {
     if (url !== appUrl && !url.startsWith(appUrl)) e.preventDefault();
   });
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  w.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
 
   // Harden every <webview> the renderer creates, regardless of its attributes.
-  win.webContents.on("will-attach-webview", (_e, prefs, params) => {
+  w.webContents.on("will-attach-webview", (_e, prefs, params) => {
     delete prefs.preload;
     delete prefs.preloadURL;
     prefs.nodeIntegration = false;
@@ -303,10 +363,20 @@ function createWindow() {
     prefs.webSecurity = true;
     prefs.allowRunningInsecureContent = false;
     params.partition = WEB_PARTITION;
-    // Only http(s) may load in a webview.
-    if (!/^https?:\/\//i.test(params.src || "")) params.src = "about:blank";
+    // http(s) plus the two schemes Quill itself navigates to on purpose:
+    // view-source: (Ctrl+U) and file:// (Ctrl+O — user-picked files only).
+    if (!/^(file:\/\/|(view-source:)?https?:\/\/)/i.test(params.src || "")) params.src = "about:blank";
   });
-  win.webContents.on("did-attach-webview", (_e, wc) => {
+  w.webContents.on("did-attach-webview", (_e, wc) => {
+    // Guest events go to the window that owns this webview — with multiple
+    // windows, broadcasting tab commands would drive every window at once.
+    const sendOwner = (ch, payload) => {
+      try {
+        BrowserWindow.fromWebContents(wc.hostWebContents || wc)?.webContents.send(ch, payload);
+      } catch {
+        /* window gone */
+      }
+    };
     // Document-start scriptlet injection into the page's MAIN world (see the
     // SCRIPTLETS note above). The debugger session stays attached for the
     // webview's lifetime so every new document gets the script.
@@ -344,7 +414,7 @@ function createWindow() {
       }
       if (cmd) {
         e.preventDefault();
-        win?.webContents.send("quill:cmd", cmd);
+        sendOwner("quill:cmd", cmd);
       }
     });
     wc.setWindowOpenHandler(({ url }) => {
@@ -366,21 +436,21 @@ function createWindow() {
           } catch {
             /* ignore */
           }
-          win?.webContents.send("quill:blocked", { url, host: h });
+          sendOwner("quill:blocked", { url, host: h });
           return { action: "deny" };
         }
-        win?.webContents.send("quill:open-url", { url, from: wc.getURL() });
+        sendOwner("quill:open-url", { url, from: wc.getURL() });
       }
       return { action: "deny" };
     });
     wc.on("will-navigate", (e, url) => {
-      if (!/^https?:\/\//i.test(url)) e.preventDefault();
+      if (!/^(file:\/\/|(view-source:)?https?:\/\/)/i.test(url)) e.preventDefault();
     });
     // Real page titles flow back so tabs and history show them, not just hostnames.
     wc.on("page-title-updated", (_e, title) => {
       try {
         const url = wc.getURL();
-        if (url && title) win?.webContents.send("quill:frame-title", { url, title: String(title).slice(0, 90) });
+        if (url && title) sendOwner("quill:frame-title", { url, title: String(title).slice(0, 90) });
       } catch {
         /* window already gone */
       }
@@ -392,7 +462,7 @@ function createWindow() {
         const url = wc.getURL();
         // Backup title push: covers cases page-title-updated misses.
         const t = wc.getTitle();
-        if (url && t) win?.webContents.send("quill:frame-title", { url, title: String(t).slice(0, 90) });
+        if (url && t) sendOwner("quill:frame-title", { url, title: String(t).slice(0, 90) });
       } catch {
         /* not a page we care about */
       }
@@ -400,15 +470,18 @@ function createWindow() {
   });
 
   if (isDev) {
-    win.loadURL(appUrl);
-    win.webContents.openDevTools({ mode: "detach" });
+    w.loadURL(fresh ? `${appUrl}#fresh` : appUrl);
+    w.webContents.openDevTools({ mode: "detach" });
   } else {
-    win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+    // #fresh: this window skips session restore (a second window must not
+    // reopen the same tabs the first one is already showing).
+    w.loadFile(path.join(__dirname, "..", "dist", "index.html"), fresh ? { hash: "fresh" } : undefined);
   }
 }
 
 function buildMenu() {
   /** @type {Electron.MenuItemConstructorOptions[]} */
+  const cmd = (c) => () => focusedWin()?.webContents.send("quill:cmd", c);
   const template = [
     ...(isMac
       ? [
@@ -431,20 +504,25 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
-        { label: "New Tab", accelerator: "CmdOrCtrl+T", click: () => win?.webContents.send("quill:cmd", "new-tab") },
-        { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: () => win?.webContents.send("quill:cmd", "close-tab") },
+        { label: "New Tab", accelerator: "CmdOrCtrl+T", click: cmd("new-tab") },
+        { label: "New Window", accelerator: "CmdOrCtrl+N", click: () => createWindow(true) },
+        { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: cmd("close-tab") },
         { type: "separator" },
-        { label: "Save as PDF…", accelerator: "CmdOrCtrl+P", click: () => win?.webContents.send("quill:cmd", "save-pdf") },
+        { label: "Open File…", accelerator: "CmdOrCtrl+O", click: cmd("open-file") },
+        { type: "separator" },
+        { label: "Save as PDF…", accelerator: "CmdOrCtrl+P", click: cmd("save-pdf") },
+        { label: "Print…", accelerator: "CmdOrCtrl+Alt+P", click: cmd("print-page") },
         { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
       ],
     },
-    { label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }, { type: "separator" }, { label: "Find…", accelerator: "CmdOrCtrl+F", click: () => win?.webContents.send("quill:cmd", "find") }] },
+    { label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }, { type: "separator" }, { label: "Find…", accelerator: "CmdOrCtrl+F", click: cmd("find") }, { label: "Focus Address Bar", accelerator: "CmdOrCtrl+L", click: cmd("focus-bar") }] },
     {
       label: "View",
       submenu: [
-        { label: "Reload Page", accelerator: "CmdOrCtrl+R", click: () => win?.webContents.send("quill:cmd", "reload") },
-        { label: "Command Palette", accelerator: "CmdOrCtrl+K", click: () => win?.webContents.send("quill:cmd", "palette") },
+        { label: "Reload Page", accelerator: "CmdOrCtrl+R", click: cmd("reload") },
+        { label: "View Page Source", accelerator: "CmdOrCtrl+U", click: cmd("view-source") },
+        { label: "Command Palette", accelerator: "CmdOrCtrl+K", click: cmd("palette") },
         { type: "separator" },
         { role: "togglefullscreen" },
         ...(isDev ? [{ type: "separator" }, { role: "toggleDevTools" }] : []),
@@ -457,13 +535,65 @@ function buildMenu() {
 
 /* ---------------- IPC (allow-listed, validated) ---------------- */
 
-ipcMain.on("quill:win", (_e, action) => {
-  if (!win) return;
-  if (action === "minimize") win.minimize();
-  else if (action === "maximize") (win.isMaximized() ? win.unmaximize() : win.maximize());
-  else if (action === "close") win.close();
+ipcMain.on("quill:win", (e, action) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w) return;
+  if (action === "minimize") w.minimize();
+  else if (action === "maximize") (w.isMaximized() ? w.unmaximize() : w.maximize());
+  else if (action === "close") w.close();
 });
-ipcMain.handle("quill:is-maximized", () => Boolean(win?.isMaximized()));
+ipcMain.handle("quill:is-maximized", (e) => Boolean(BrowserWindow.fromWebContents(e.sender)?.isMaximized()));
+ipcMain.on("quill:new-window", () => createWindow(true));
+ipcMain.on("quill:perm-rules", (_e, rules) => {
+  permRules.clear();
+  if (rules && typeof rules === "object" && !Array.isArray(rules)) {
+    for (const [host, perms] of Object.entries(rules)) {
+      if (typeof host === "string" && /^[a-z0-9.-]{1,253}$/i.test(host) && Array.isArray(perms)) {
+        permRules.set(host.toLowerCase(), new Set(perms.filter((p) => typeof p === "string").slice(0, 6)));
+      }
+    }
+  }
+});
+ipcMain.handle("quill:perm-respond", (_e, id, allow, always, host, permission) => {
+  const p = pendingPerms.get(String(id));
+  if (!p) return false;
+  clearTimeout(p.timer);
+  pendingPerms.delete(String(id));
+  if (allow === true && always === true && typeof host === "string" && typeof permission === "string" && /^[a-z0-9.-]{1,253}$/i.test(host)) {
+    const h = host.toLowerCase();
+    const set = permRules.get(h) || new Set();
+    set.add(permission);
+    permRules.set(h, set);
+  }
+  p.cb(allow === true);
+  return true;
+});
+ipcMain.on("quill:dl-control", (_e, id, action) => {
+  const d = dlItems.get(String(id));
+  if (!d || !["pause", "resume", "cancel"].includes(action)) return;
+  try {
+    d.item[action]();
+    if (action === "pause") d.mark("paused");
+    if (action === "resume") d.mark("downloading");
+  } catch {
+    /* item already gone */
+  }
+});
+ipcMain.handle("quill:print", (_e, wcId) => {
+  const wc = Number.isInteger(wcId) ? webContents.fromId(wcId) : null;
+  if (!wc || wc.isDestroyed()) return false;
+  // Electron's native print dialog (the OS printer list).
+  wc.print({ printBackground: true }, () => {});
+  return true;
+});
+ipcMain.handle("quill:open-file", async (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender) || win;
+  const r = await dialog.showOpenDialog(w, {
+    properties: ["openFile"],
+    filters: [{ name: "Pages, PDFs & images", extensions: ["html", "htm", "pdf", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "txt", "md"] }],
+  });
+  return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+});
 ipcMain.handle("quill:open-external", async (_e, url) => {
   if (typeof url === "string" && /^https?:\/\//i.test(url) && url.length < 4096) await shell.openExternal(url);
 });
@@ -484,9 +614,10 @@ ipcMain.handle("quill:clear-browsing-data", async () => {
 });
 ipcMain.handle("quill:blocked-count", () => blockedCount);
 /** Screenshot of the whole app window (page + scribble overlay) as a PNG data URL. */
-ipcMain.handle("quill:capture-page", async () => {
-  if (!win) return "";
-  const img = await win.webContents.capturePage();
+ipcMain.handle("quill:capture-page", async (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w) return "";
+  const img = await w.webContents.capturePage();
   return img.isEmpty() ? "" : img.toDataURL();
 });
 /** Copy a PNG data URL (the scribble capture) to the system clipboard. */
@@ -523,7 +654,7 @@ ipcMain.handle("quill:save-pdf", async (_e, wcId, name) => {
     fs.writeFileSync(savePath, data);
     rememberDownload(savePath);
     // Reuse the downloads drawer: it lands there as a finished download.
-    win?.webContents.send("quill:download", { id: `pdf-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: data.length, total: data.length, state: "completed" });
+    sendAll("quill:download", { id: `pdf-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: data.length, total: data.length, state: "completed" });
     return true;
   } catch {
     return false;
@@ -539,15 +670,17 @@ ipcMain.handle("quill:save-html", async (_e, html, name) => {
     for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${safe} (${i}).html`);
     fs.writeFileSync(savePath, html, "utf8");
     rememberDownload(savePath);
-    win?.webContents.send("quill:download", { id: `html-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: Buffer.byteLength(html), total: Buffer.byteLength(html), state: "completed" });
+    sendAll("quill:download", { id: `html-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: Buffer.byteLength(html), total: Buffer.byteLength(html), state: "completed" });
     return true;
   } catch {
     return false;
   }
 });
-ipcMain.handle("quill:toggle-fullscreen", () => {
+ipcMain.handle("quill:toggle-fullscreen", (e) => {
   try {
-    win?.setFullScreen(!win.isFullScreen());
+    const w = BrowserWindow.fromWebContents(e.sender) || win;
+    if (!w) return false;
+    w.setFullScreen(!w.isFullScreen());
     return true;
   } catch {
     return false;
@@ -570,9 +703,10 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
+    const w = BrowserWindow.getAllWindows()[0];
+    if (w) {
+      if (w.isMinimized()) w.restore();
+      w.focus();
     }
   });
 

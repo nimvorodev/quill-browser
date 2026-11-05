@@ -5,6 +5,26 @@ import { CAT_LABEL, CAT_COLOR, type Category } from "../lib/filters";
 import type { PaperTone, ReinkStyle } from "../lib/settings";
 import { pinSizelessImages } from "../lib/images";
 import { isFrameHostile } from "../lib/nav";
+import { streamChat, type AIConfig } from "../lib/ai";
+
+/** Translate target languages — the picker in the re-ink toolbar. */
+const LANGS: Record<string, string> = {
+  en: "English",
+  vi: "Vietnamese",
+  de: "German",
+  fr: "French",
+  es: "Spanish",
+  pt: "Portuguese",
+  it: "Italian",
+  nl: "Dutch",
+  pl: "Polish",
+  tr: "Turkish",
+  ru: "Russian",
+  ar: "Arabic",
+  ja: "Japanese",
+  zh: "Chinese",
+  ko: "Korean",
+};
 
 /** Weave real links inline where their anchor words appear, plus chips for any extra links. */
 function Linked({
@@ -189,6 +209,7 @@ export function ReaderView({
   onAsk,
   onNote,
   onLink,
+  aiCfg,
   shieldsOn,
   fontStep,
   setFontStep,
@@ -206,6 +227,8 @@ export function ReaderView({
   stageNote: string;
   error: string | null;
   url: string;
+  /** AI engine config — the translate button runs the page text through it. */
+  aiCfg: AIConfig;
   onRetry: () => void;
   onShowOriginal: () => void;
   onLiveFrame: () => void;
@@ -233,6 +256,12 @@ export function ReaderView({
   const [showToc, setShowToc] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
   const [sel, setSel] = useState<{ text: string; x: number; y: number; below: boolean } | null>(null);
+  // Page translation: the configured AI engine (offline Scribe or Ollama etc.)
+  // translates the re-inked text; the original is one click back.
+  const [lang, setLang] = useState((navigator.language || "en").slice(0, 2));
+  const [translation, setTranslation] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const transBuf = useRef("");
 
   useEffect(() => {
     const el = scroller.current;
@@ -265,6 +294,39 @@ export function ReaderView({
     document.addEventListener("mouseup", up);
     return () => document.removeEventListener("mouseup", up);
   }, []);
+
+  // Reset the translation when the page changes.
+  useEffect(() => {
+    setTranslation(null);
+    setTranslating(false);
+  }, [url]);
+
+  const translate = async () => {
+    if (!article || translating) return;
+    setTranslating(true);
+    transBuf.current = "";
+    setTranslation("");
+    try {
+      // ponytail: 24k-char cap — the offline Scribe's context is small; a
+      // chunked/parallel translation can replace this when long pages matter.
+      await streamChat(
+        aiCfg,
+        [
+          {
+            role: "user",
+            content: `Translate the following article into ${LANGS[lang] || "English"}. Reply with ONLY the translation as plain text, keeping the paragraph breaks.\n\n${article.text.slice(0, 24000)}`,
+          },
+        ],
+        (tok) => {
+          transBuf.current += tok;
+          setTranslation(transBuf.current);
+        },
+      );
+    } catch {
+      setTranslation((t) => t || "(translation failed — check the AI engine in the ask-AI panel)");
+    }
+    setTranslating(false);
+  };
 
   const catCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -494,6 +556,33 @@ export function ReaderView({
                 {showImages ? "pictures: on" : "ink-only (no pics)"}
               </button>
 
+              {/* Translate the page through the configured AI engine. */}
+              <span className="flex items-center gap-1">
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value)}
+                  title="Translation target language"
+                  className="hd-soft cursor-pointer bg-paper2/70 px-1 py-[1px] text-[13px] text-ink2 outline-none"
+                >
+                  {Object.entries(LANGS).map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => (translation !== null ? setTranslation(null) : void translate())}
+                  disabled={translating}
+                  className={[
+                    "hd-soft px-2 py-[1px] transition",
+                    translation !== null ? "bg-cyan font-bold text-[#12171f]" : "bg-paper2/70 text-ink2 hover:bg-paper3",
+                  ].join(" ")}
+                  title={translation !== null ? "Show the original text" : "Translate this page with your AI engine"}
+                >
+                  {translating ? "translating…" : translation !== null ? `✓ ${LANGS[lang] || lang} · back to original` : "translate"}
+                </button>
+              </span>
+
               <span className="ml-auto flex items-center gap-1">
                 <button onClick={() => setFontStep(Math.max(-1, fontStep - 1))} className="hd grid h-[24px] w-[24px] place-items-center bg-paper2 text-ink hover:bg-yellow" title="Smaller type">
                   <Icon name="minus" size={12} />
@@ -612,7 +701,16 @@ export function ReaderView({
 
           {/* body */}
           <article ref={bodyRef} className={fontClass} style={{ fontSize: `${(reinkStyle === "mono" ? 15 : 17) + fontStep * 1.4}px` }}>
-            {article.nodes.map((n, i) => {
+            {translation !== null
+              ? translation
+                  .split(/\n\s*\n/)
+                  .filter((p) => p.trim())
+                  .map((p, i) => (
+                    <p key={i} className="mb-4">
+                      {p}
+                    </p>
+                  ))
+              : article.nodes.map((n, i) => {
               if (n.t === "h")
                 return (
                   <h2

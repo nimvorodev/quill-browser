@@ -197,7 +197,7 @@ export function isSafeWebUrl(u: string): boolean {
   if (u === HOME || u.startsWith("quill://")) return true;
   try {
     const p = new URL(u);
-    return p.protocol === "http:" || p.protocol === "https:";
+    return p.protocol === "http:" || p.protocol === "https:" || p.protocol === "file:" || p.protocol === "view-source:";
   } catch {
     return false;
   }

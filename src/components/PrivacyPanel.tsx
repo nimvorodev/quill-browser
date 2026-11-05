@@ -6,6 +6,14 @@ import { desktop } from "../lib/platform";
 import { hostOf } from "../lib/nav";
 import type { Tab } from "../lib/store";
 
+/** Friendly names for the permissions a site can ask for. */
+const PERM_LABEL: Record<string, string> = {
+  media: "camera & microphone",
+  geolocation: "location",
+  notifications: "notifications",
+  midi: "MIDI devices",
+};
+
 function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
     <button
@@ -37,6 +45,8 @@ export function PrivacyPanel({
   onRefetch,
   onBackup,
   onRestore,
+  perms,
+  onRevokePerm,
 }: {
   tab: Tab;
   settings: Settings;
@@ -53,6 +63,9 @@ export function PrivacyPanel({
   onBackup?: () => void;
   /** Restore from a backup file the user picked. */
   onRestore?: (file: File) => void;
+  /** Granted site permissions { host: [permission] } — the banner's "always allow". */
+  perms?: Record<string, string[]>;
+  onRevokePerm?: (host: string) => void;
 }) {
   const [confirm, setConfirm] = useState<string | null>(null);
   // Erase buttons stay armed for 3s only — a stale "tap again" state must not
@@ -76,6 +89,27 @@ export function PrivacyPanel({
           every tracker, pixel, script &amp; query param Quill stripped — {RULE_COUNT} rules loaded.
         </p>
       </header>
+
+      {/* Site permissions granted from the prompt banner. */}
+      {perms && Object.keys(perms).length > 0 && (
+        <section>
+          <h3 className="mb-1 text-[15px] font-bold">site permissions</h3>
+          <div className="ruled space-y-1 border-l-2 border-ink/20 pl-2">
+            {Object.entries(perms).map(([h, list]) => (
+              <div key={h} className="group flex items-center gap-2 py-[3px] text-[15px]">
+                <span className="min-w-0 flex-1 truncate">
+                  <b>{h}</b> <span className="text-ink3">· {list.map((p) => PERM_LABEL[p] || p).join(", ")}</span>
+                </span>
+                {onRevokePerm && (
+                  <button onClick={() => onRevokePerm(h)} className="shrink-0 text-[13px] text-ink3 underline decoration-dotted hover:text-red">
+                    revoke
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="hd grid grid-cols-3 divide-x-2 divide-dashed divide-ink/25 bg-paper2 ink-shadow">
         {[

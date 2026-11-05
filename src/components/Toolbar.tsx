@@ -16,6 +16,7 @@ export function Toolbar({
   onSetView,
   onBack,
   onForward,
+  onGoto,
   onReload,
   onHome,
   onBookmark,
@@ -46,6 +47,8 @@ export function Toolbar({
   onSetView: (view: ViewMode, origSub?: OriginalSubMode) => void;
   onBack: () => void;
   onForward: () => void;
+  /** Jump straight to a stack index — the back/forward history dropdown. */
+  onGoto: (idx: number) => void;
   onReload: () => void;
   onHome: () => void;
   onBookmark: () => void;
@@ -75,6 +78,11 @@ export function Toolbar({
   // Anything else hijacks the keystroke into the first URL suggestion.
   const [hi, setHi] = useState(-1);
   const [menu, setMenu] = useState(false);
+  // The back/forward history dropdown: which direction, and whether a
+  // long-press already fired (the following click must not also travel).
+  const [histMenu, setHistMenu] = useState<null | "back" | "fwd">(null);
+  const holdTimer = useRef<number | null>(null);
+  const suppressClick = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -82,7 +90,7 @@ export function Toolbar({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key.toLowerCase() === "l") {
+      if ((mod && e.key.toLowerCase() === "l") || e.key === "F6" || (e.altKey && e.key.toLowerCase() === "d")) {
         e.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -93,8 +101,18 @@ export function Toolbar({
         inputRef.current?.blur();
       }
     };
+    // The menu accelerator (Ctrl/Cmd+L) and the guest key relay arrive as a
+    // window event — same focus+select, whichever path fired them.
+    const onFocusBar = () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("quill:focus-bar", onFocusBar);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("quill:focus-bar", onFocusBar);
+    };
   }, []);
 
   useEffect(() => {
@@ -102,6 +120,7 @@ export function Toolbar({
       const target = e.target as Node;
       if (!wrapRef.current?.contains(target)) setOpen(false);
       if (!menuRef.current?.contains(target)) setMenu(false);
+      if (!(target as HTMLElement).closest?.("[data-hist-menu]")) setHistMenu(null);
     };
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
@@ -172,14 +191,39 @@ export function Toolbar({
     <div className="relative z-30 flex items-center gap-2 border-b-2 border-ink bg-paper2/80 px-2 py-2 backdrop-blur-sm">
       <div className="flex items-center gap-1">
         {[
-          { icon: "back", fn: onBack, off: tab.idx <= 0, title: "Back (Alt+←)", cls: "grid" },
-          { icon: "forward", fn: onForward, off: tab.idx >= tab.stack.length - 1, title: "Forward (Alt+→)", cls: "hidden sm:grid" },
-          { icon: "reload", fn: onReload, title: "Reload (Ctrl/Cmd+R)", spin: tab.loading, cls: "grid" },
-          { icon: "home", fn: onHome, title: "Home (Alt+Home)", cls: "hidden md:grid" },
+          { icon: "back", fn: onBack, off: tab.idx <= 0, title: "Back (Alt+←) — hold for history", cls: "grid", dir: "back" as const },
+          { icon: "forward", fn: onForward, off: tab.idx >= tab.stack.length - 1, title: "Forward (Alt+→) — hold for history", cls: "hidden sm:grid", dir: "fwd" as const },
+          { icon: "reload", fn: onReload, title: "Reload (Ctrl/Cmd+R)", spin: tab.loading, cls: "grid", dir: undefined },
+          { icon: "home", fn: onHome, title: "Home (Alt+Home)", cls: "hidden md:grid", dir: undefined },
         ].map((b) => (
           <button
             key={b.icon}
-            onClick={b.fn}
+            onClick={() => {
+              if (suppressClick.current) {
+                suppressClick.current = false;
+                return;
+              }
+              b.fn();
+            }}
+            onContextMenu={(e) => {
+              if (b.dir) {
+                e.preventDefault();
+                setHistMenu(b.dir);
+              }
+            }}
+            onPointerDown={(e) => {
+              if (!b.dir || e.button !== 0) return;
+              holdTimer.current = window.setTimeout(() => {
+                suppressClick.current = true;
+                setHistMenu(b.dir!);
+              }, 420);
+            }}
+            onPointerUp={() => {
+              if (holdTimer.current) window.clearTimeout(holdTimer.current);
+            }}
+            onPointerLeave={() => {
+              if (holdTimer.current) window.clearTimeout(holdTimer.current);
+            }}
             disabled={b.off}
             title={b.title}
             className={[
@@ -190,6 +234,30 @@ export function Toolbar({
             <Icon name={b.icon} size={18} className={b.spin ? "spin-slow" : ""} />
           </button>
         ))}
+
+        {/* back/forward history dropdown (long-press or right-click) */}
+        {histMenu && (
+          <div data-hist-menu className="pop-in absolute bottom-[46px] left-1 z-50 max-h-[320px] w-[320px] overflow-y-auto border-2 border-ink bg-paper2 ink-shadow-lg">
+            <p className="sticky top-0 border-b border-dashed border-ink/30 bg-paper3/90 px-2.5 py-1 text-[12px] uppercase tracking-[0.14em] text-ink3">
+              {histMenu === "back" ? "pages before this one" : "pages ahead"}
+            </p>
+            {(histMenu === "back"
+              ? tab.stack.slice(0, tab.idx).map((u, i) => ({ u, i })).reverse()
+              : tab.stack.slice(tab.idx + 1).map((u, i) => ({ u, i: tab.idx + 1 + i }))
+            ).map(({ u, i }) => (
+              <button
+                key={i}
+                onClick={() => {
+                  setHistMenu(null);
+                  onGoto(i);
+                }}
+                className="block w-full truncate px-2.5 py-[5px] text-left text-[14.5px] hover:bg-yellow/40"
+              >
+                {prettyUrl(u)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* address bar */}

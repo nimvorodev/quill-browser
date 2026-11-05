@@ -47,9 +47,17 @@ export function Drawer({
 
 /* ---------------- history ---------------- */
 export function HistoryPanel({
-  history, onOpen, onClear, onForget,
+  history,
+  closed,
+  onReopenClosed,
+  onOpen,
+  onClear,
+  onForget,
 }: {
   history: HistoryEntry[];
+  /** Recently closed tabs (in-memory, newest last) — restorable, like Chrome's history menu. */
+  closed: { url: string; title: string }[];
+  onReopenClosed: (index: number) => void;
   onOpen: (url: string) => void;
   onClear: () => void;
   onForget: (at: number) => void;
@@ -77,7 +85,25 @@ export function HistoryPanel({
           </button>
         )}
       </div>
-      {!history.length && <p className="p-4 text-center text-[16px] italic text-ink3">the log is empty — go read something</p>}
+      {!history.length && !closed.length && <p className="p-4 text-center text-[16px] italic text-ink3">the log is empty — go read something</p>}
+      {closed.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-1 text-[13px] uppercase tracking-[0.18em] text-ink3">recently closed</p>
+          <div className="ruled border-l-2 border-ink/20 pl-2">
+            {closed.map((c, i) => (
+              <button
+                key={c.url + i}
+                onClick={() => onReopenClosed(i)}
+                className="flex w-full items-center gap-2 py-[5px] text-left hover:underline decoration-wavy decoration-pink underline-offset-4"
+              >
+                <Icon name="reload" size={13} className="shrink-0 text-ink3" />
+                <span className="min-w-0 flex-1 truncate text-[16.5px]">{c.title || prettyUrl(c.url)}</span>
+                <span className="shrink-0 text-[12.5px] text-ink3">reopen</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {groups.map(([day, items]) => (
         <div key={day} className="mb-4">
           <p className="mb-1 text-[13px] uppercase tracking-[0.18em] text-ink3">{day}</p>
@@ -434,6 +460,12 @@ const KEYS: [string, string][] = [
   ["Ctrl/⌘ + Tab", "cycle tabs (⇧ = reverse)"],
   ["Ctrl/⌘ + ⇧ + T", "reopen the last closed tab"],
   ["Ctrl/⌘ + S", "save this page as HTML"],
+  ["Ctrl/⌘ + L / F6 / Alt+D", "focus the address bar"],
+  ["Ctrl/⌘ + N", "new window (fresh, no session restore)"],
+  ["Ctrl/⌘ + U", "view page source"],
+  ["Ctrl/⌘ + O", "open a local file"],
+  ["hold ⏮ / ⏭", "this tab's history dropdown"],
+  ["middle-click a tab", "close it"],
   ["Ctrl/⌘ + 1…9", "jump to tab (9 = last)"],
   ["Esc", "close anything that's open"],
 ];
@@ -458,7 +490,7 @@ export function ShortcutsPanel() {
 
 const mb = (n: number) => (n > 0 ? `${(n / 1048576).toFixed(1)} MB` : "—");
 
-export function DownloadsPanel({ items }: { items: DownloadItem[] }) {
+export function DownloadsPanel({ items, onControl }: { items: DownloadItem[]; onControl?: (id: string, action: "pause" | "resume" | "cancel") => void }) {
   if (!items.length) {
     return (
       <p className="p-3 text-[16px] italic text-ink3">
@@ -477,6 +509,24 @@ export function DownloadsPanel({ items }: { items: DownloadItem[] }) {
                 {d.state === "downloading" ? `${mb(d.received)} / ${mb(d.total)}` : d.state === "completed" ? mb(d.total) : d.state}
               </span>
             </span>
+            {(d.state === "downloading" || d.state === "paused") && onControl && (
+              <span className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={() => onControl(d.id, d.state === "paused" ? "resume" : "pause")}
+                  className="hd-soft btn-sketch bg-paper3/60 px-2 py-0.5 text-[13.5px] text-ink hover:bg-yellow"
+                  title={d.state === "paused" ? "Resume download" : "Pause download"}
+                >
+                  {d.state === "paused" ? "resume" : "pause"}
+                </button>
+                <button
+                  onClick={() => onControl(d.id, "cancel")}
+                  className="hd-soft btn-sketch bg-paper3/60 px-2 py-0.5 text-[13.5px] text-ink3 hover:bg-pink hover:text-white"
+                  title="Cancel download"
+                >
+                  cancel
+                </button>
+              </span>
+            )}
             {d.state === "completed" && (
               <button
                 onClick={() => void desktop?.showItem(d.path)}

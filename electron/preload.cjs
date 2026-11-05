@@ -37,6 +37,16 @@ contextBridge.exposeInMainWorld("quill", {
   onFrameTitle: on("quill:frame-title"),
   savePdf: (wcId, name) => ipcRenderer.invoke("quill:save-pdf", Number(wcId) || 0, String(name || "")),
   saveHtml: (html, name) => ipcRenderer.invoke("quill:save-html", String(html || ""), String(name || "")),
+  printPage: (wcId) => ipcRenderer.invoke("quill:print", Number(wcId) || 0),
+  openFile: () => ipcRenderer.invoke("quill:open-file"),
+  newWindow: () => ipcRenderer.send("quill:new-window"),
+  dlControl: (id, action) => ipcRenderer.send("quill:dl-control", String(id || ""), String(action || "")),
+  setPermRules: (rules) => ipcRenderer.send("quill:perm-rules", rules && typeof rules === "object" ? rules : {}),
+  permRespond: (id, allow, always, host, permission) =>
+    ipcRenderer.invoke("quill:perm-respond", String(id || ""), allow === true, always === true, String(host || ""), String(permission || "")),
+  onPermRequest: on("quill:perm-request", (v) =>
+    typeof v === "object" && v !== null ? { id: String(v.id || ""), host: String(v.host || ""), permission: String(v.permission || "") } : null,
+  ),
   toggleFullscreen: () => ipcRenderer.invoke("quill:toggle-fullscreen"),
 
   /** Menu accelerators & popups from web content arrive here. */

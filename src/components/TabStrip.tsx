@@ -107,6 +107,13 @@ export function TabStrip({
                 e.preventDefault();
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY });
               }}
+              onMouseDown={(e) => {
+                // Middle-click closes the tab — every browser's convention.
+                if (e.button === 1) {
+                  e.preventDefault();
+                  onClose(t.id);
+                }
+              }}
               role="tab"
               aria-selected={active}
               className={[

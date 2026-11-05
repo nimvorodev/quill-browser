@@ -59,6 +59,14 @@ const DEFAULT_SHELF: ShelfItem[] = SHELF.map((t, i) => ({
   blurb: t.blurb,
 }));
 
+/** Friendly names for the permissions a site can ask for. */
+const PERM_LABEL: Record<string, string> = {
+  media: "camera & microphone",
+  geolocation: "location",
+  notifications: "notifications",
+  midi: "MIDI devices",
+};
+
 const newTab = (ghost: boolean, origSub: OriginalSubMode = "shielded"): Tab => ({
   id: uid(),
   title: "New page",
@@ -200,6 +208,26 @@ export default function App() {
     if (!desktop) return;
     void desktop.setAskSave(settings.askSave);
   }, [settings.askSave]);
+  /* ---------------- site permissions ---------------- */
+  /** Granted permissions per host — persisted here, enforced in main. */
+  const [permRules, setPermRules] = useLocal<Record<string, string[]>>("perm-rules", {});
+  const [permReq, setPermReq] = useState<{ id: string; host: string; permission: string } | null>(null);
+  // Push the grant table to main on boot and whenever it changes.
+  useEffect(() => {
+    desktop?.setPermRules(permRules);
+  }, [permRules]);
+  useEffect(() => {
+    if (!desktop?.onPermRequest) return;
+    return desktop.onPermRequest((r) => setPermReq(r));
+  }, []);
+  const answerPerm = (allow: boolean, always: boolean) => {
+    if (!permReq) return;
+    void desktop?.permRespond(permReq.id, allow, always, permReq.host, permReq.permission);
+    if (allow && always) {
+      setPermRules((r) => ({ ...r, [permReq.host]: [...new Set([...(r[permReq.host] || []), permReq.permission])] }));
+    }
+    setPermReq(null);
+  };
   // One-time: older installs saved defaultView "reader" (re-ink first); the shipped default is
   // "original" ("the real site first"), so a stale "reader" is reset once. Re-choosing reader sticks.
   useEffect(() => {
@@ -225,7 +253,9 @@ export default function App() {
   const [seenIntro, setSeenIntro] = useLocal<boolean>("seen.intro", false);
 
   const [boot] = useState(() => {
-    const restored = restoreSession(settings.restoreSession);
+    // #fresh windows (Ctrl+N) start blank — two windows restoring the same
+    // session would duplicate every tab.
+    const restored = location.hash.includes("fresh") ? null : restoreSession(settings.restoreSession);
     const list = restored?.tabs.length ? restored.tabs : [newTab(settings.ghostDefault, origFor(settings.defaultView))];
     return { tabs: list, active: list[restored?.active ?? 0]?.id ?? list[0].id };
   });
@@ -248,8 +278,8 @@ export default function App() {
   const [findInfo, setFindInfo] = useState({ active: 0, matches: 0 });
   // Every mounted live webview, keyed by tab id: the active tab's is the find/PDF target.
   const webviewMap = useRef<Map<string, WebviewEl>>(new Map());
-  /** Ctrl+Shift+T reopens from here (last 10 closed tabs, in-memory only). */
-  const closedRef = useRef<Tab[]>([]);
+  /** Ctrl+Shift+T and the history drawer reopen from here (last 10 closed tabs, in-memory only). */
+  const [closedTabs, setClosedTabs] = useState<Tab[]>([]);
   const onFoundInPage = useCallback((info: { active: number; matches: number }) => setFindInfo(info), []);
   /* ---------------- live-view keep-alive ----------------
      The active tab's live view renders in a persistent layer (like the tube
@@ -393,14 +423,33 @@ export default function App() {
     const ok = await desktop.saveHtml(html, name);
     toast(ok ? "page saved to Downloads" : "couldn't save this page", ok ? "var(--lime)" : "var(--red)", ok ? "download" : "x");
   }, [tab, desktop, toast]);
+  /** Ctrl+Alt+P / menu — the real OS print dialog for the live page. */
+  const printPage = useCallback(async () => {
+    if (!tab || tab.url === HOME || !desktop) return;
+    const el = webviewMap.current.get(tab.id);
+    if (!el) return toast("open the live page first — reader copies print from the PDF button", "var(--orange)", "info");
+    const ok = await desktop.printPage(el.getWebContentsId());
+    if (!ok) toast("couldn't open the print dialog", "var(--red)", "x");
+  }, [tab, desktop, toast]);
   /** Shared by the host keydown handler and the guest key relay (quill:cmd). */
   const reopenClosedTab = useCallback(() => {
-    const last = closedRef.current.pop();
-    if (last) {
-      setTabs((ts) => [...ts, last]);
-      setActiveId(last.id);
-    }
-  }, []);
+    const last = closedTabs[closedTabs.length - 1];
+    if (!last) return;
+    setClosedTabs((cs) => cs.filter((t) => t.id !== last.id));
+    setTabs((ts) => [...ts, last]);
+    setActiveId(last.id);
+  }, [closedTabs]);
+  /** Restore a specific closed tab from the history drawer. */
+  const reopenClosedAt = useCallback(
+    (idx: number) => {
+      const t = closedTabs[idx];
+      if (!t) return;
+      setClosedTabs((cs) => cs.filter((x) => x.id !== t.id));
+      setTabs((ts) => [...ts, t]);
+      setActiveId(t.id);
+    },
+    [closedTabs],
+  );
   const cycleTab = useCallback(
     (dir: number) => {
       const i = tabs.findIndex((t) => t.id === activeId);
@@ -598,6 +647,29 @@ export default function App() {
         return;
       }
 
+      // view-source: (Ctrl+U) and file:// (Ctrl+O) load directly in the live
+      // webview — no relay, no shield pipeline, no tracking-param games.
+      if (raw.startsWith("view-source:") || raw.startsWith("file://")) {
+        const stack = target.stack[target.idx] === raw ? target.stack : [...target.stack.slice(0, target.idx + 1), raw];
+        patch(target.id, (t) => ({
+          ...t,
+          url: raw,
+          stack,
+          idx: stack.length - 1,
+          view: "original",
+          originalMode: "live",
+          title: pageTitleFor(raw),
+          article: null,
+          error: null,
+          loading: false,
+          stage: null,
+          stageNote: "",
+          blocked: [],
+        }));
+        if (target.id === activeId) setInput(raw);
+        return;
+      }
+
       if (!isUrl(raw)) pushRecent(raw);
 
       const filters = filtersFor(target.allow, target.deny);
@@ -663,6 +735,19 @@ export default function App() {
     [tabs, tab, activeId, navigate],
   );
 
+  /** Ctrl+U — view-source: of the current page, in the live webview. */
+  const viewSource = useCallback(() => {
+    if (!tab || tab.url === HOME) return;
+    const target = tab.url.startsWith("view-source:") ? tab.url.slice("view-source:".length) : tab.url;
+    if (!/^https?:\/\//i.test(target)) return;
+    navigate(tab, `view-source:${target}`);
+  }, [tab, navigate]);
+  /** Ctrl+O — pick a local file and open it in a tab. */
+  const openLocalFile = useCallback(async () => {
+    const p = await desktop?.openFile();
+    if (p) go(p);
+  }, [desktop, go]);
+
   const openNew = useCallback(
     (url?: string, mode?: ViewMode) => {
       const fresh = newTab(settings.ghostDefault, origFor(settings.defaultView));
@@ -683,13 +768,10 @@ export default function App() {
     (id: string) => {
       abortTabFetch(id);
       reqGenRef.current.delete(id);
+      // Ctrl+Shift+T (and the history drawer) reopen from here — last 10, in-memory.
+      const closing = tabs.find((t) => t.id === id);
+      if (closing) setClosedTabs((cs) => [...cs, closing].slice(-10));
       setTabs((ts) => {
-        // Ctrl+Shift+T reopens the last closed tab (stack of 10, in-memory).
-        const closing = ts.find((t) => t.id === id);
-        if (closing) {
-          closedRef.current.push(closing);
-          if (closedRef.current.length > 10) closedRef.current.shift();
-        }
         if (ts.length === 1) {
           const fresh = newTab(settings.ghostDefault, origFor(settings.defaultView));
           setActiveId(fresh.id);
@@ -701,7 +783,7 @@ export default function App() {
         return next;
       });
     },
-    [activeId, settings.ghostDefault, settings.defaultView, abortTabFetch],
+    [activeId, tabs, settings.ghostDefault, settings.defaultView, abortTabFetch],
   );
 
   /* ---------------- tab menu (right-click) ---------------- */
@@ -803,6 +885,23 @@ export default function App() {
         stage: relay ? "fetching" : null,
         stageNote: "",
       }));
+      setInput(url === HOME ? "" : url);
+      if (relay) loadReader(tab.id, url, title, tab.ghost, filtersFor(tab.allow, tab.deny));
+      else abortTabFetch(tab.id);
+    },
+    [tab, defaultNavMode, patch, loadReader, filtersFor, abortTabFetch],
+  );
+
+  /** Jump straight to a stack index — the back/forward dropdown. */
+  const travelTo = useCallback(
+    (idx: number) => {
+      if (!tab || idx < 0 || idx >= tab.stack.length || idx === tab.idx) return;
+      const url = isSafeWebUrl(tab.stack[idx]) ? tab.stack[idx] : HOME;
+      const handled = selfRenders(url);
+      const view: ViewMode = url === HOME ? "start" : handled ? "reader" : tab.view === "start" ? defaultNavMode().view : tab.view;
+      const relay = url !== HOME && !handled && (view === "reader" || view === "split" || (view === "original" && tab.originalMode !== "live"));
+      const title = url === HOME ? "New page" : pageTitleFor(url);
+      patch(tab.id, (t) => ({ ...t, idx, url, view, article: null, error: null, blocked: [], title, loading: relay, stage: relay ? "fetching" : null, stageNote: "" }));
       setInput(url === HOME ? "" : url);
       if (relay) loadReader(tab.id, url, title, tab.ghost, filtersFor(tab.allow, tab.deny));
       else abortTabFetch(tab.id);
@@ -1120,6 +1219,11 @@ export default function App() {
     else if (cmd === "palette") setPalette((p) => !p);
     else if (cmd === "find") setFindOpen(true);
     else if (cmd === "save-pdf") void savePdf();
+    // Menu-driven browser conventions (accelerators work even inside webviews).
+    else if (cmd === "focus-bar") window.dispatchEvent(new Event("quill:focus-bar"));
+    else if (cmd === "view-source") viewSource();
+    else if (cmd === "open-file") void openLocalFile();
+    else if (cmd === "print-page") void printPage();
     // Guest-key relay (main.cjs before-input-event): the same shortcuts the
     // host keydown handles, delivered while a webview holds the focus.
     else if (cmd === "key:f5") reload();
@@ -1258,6 +1362,13 @@ export default function App() {
     } else if (k === "s" && !e.shiftKey && !typing) {
       e.preventDefault();
       void savePageHtml();
+    } else if (k === "u" && !typing) {
+      // Web build path; on desktop the menu accelerator (Ctrl+U) delivers this.
+      e.preventDefault();
+      viewSource();
+    } else if (k === "o") {
+      e.preventDefault();
+      void openLocalFile();
     } else if (k === "s" && e.shiftKey) {
       e.preventDefault();
       setScribble((s) => !s);
@@ -1345,6 +1456,10 @@ export default function App() {
           run: () => setActiveId(t.id),
         })),
       { id: "pdf", label: "Save this page as PDF", section: "page view", icon: "download", hint: "Ctrl/⌘+P", keywords: "print pdf export save", run: () => void savePdf() },
+      { id: "print", label: "Print this page…", section: "page view", icon: "download", hint: "Ctrl/⌘+Alt+P", keywords: "print printer paper", run: () => void printPage() },
+      { id: "source", label: "View page source", section: "page view", icon: "globe", hint: "Ctrl/⌘+U", keywords: "source html code view", run: viewSource },
+      { id: "openfile", label: "Open a local file…", section: "page view", icon: "book", hint: "Ctrl/⌘+O", keywords: "open file local html pdf image", run: () => void openLocalFile() },
+      { id: "win", label: "New window", section: "tools", icon: "external", hint: "Ctrl/⌘+N", keywords: "window new second", run: () => desktop?.newWindow() },
       { id: "find", label: "Find in this page", section: "page view", icon: "search", hint: "Ctrl/⌘+F", keywords: "find search text", run: () => setFindOpen(true) },
       { id: "home", label: "Go home", section: "navigate", icon: "home", hint: "Alt+Home", run: () => go(HOME, "start") },
       { id: "tube", label: "Open the tube desk (YouTube)", section: "navigate", icon: "layers", keywords: "youtube video tube", run: () => go("https://www.youtube.com") },
@@ -1559,6 +1674,7 @@ export default function App() {
         stageNote={tab.stageNote}
         error={tab.error}
         url={tab.url}
+        aiCfg={aiCfg}
         onRetry={() => loadReader(tab.id, tab.url, tab.title, tab.ghost, filtersFor(tab.allow, tab.deny), true)}
         onShowOriginal={() => setTabView("original", "shielded")}
         onLiveFrame={() => setTabView("original", "live")}
@@ -1671,6 +1787,7 @@ export default function App() {
             onSetView={setTabView}
             onBack={() => travel(-1)}
             onForward={() => travel(1)}
+            onGoto={(idx) => travelTo(idx)}
             onReload={reload}
             onHome={() => go(HOME, "start")}
             onBookmark={toggleBookmark}
@@ -1701,6 +1818,19 @@ export default function App() {
 
         {settings.showBookmarkBar && (
           <BookmarkBar bookmarks={bookmarks} onOpen={(u) => go(u)} onRemove={(u) => setBookmarks((bs) => bs.filter((b) => b.url !== u))} editing={false} />
+        )}
+
+        {/* Site permission prompt — Chrome-style banner, auto-denies in 30s. */}
+        {permReq && (
+          <div className="pop-in flex flex-wrap items-center gap-2 border-b-2 border-ink bg-yellow/40 px-3 py-1.5 text-[14.5px] text-ink">
+            <Icon name="shield" size={14} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              <b>{permReq.host}</b> wants to use your <b>{PERM_LABEL[permReq.permission] || permReq.permission}</b>
+            </span>
+            <button onClick={() => answerPerm(true, true)} className="hd-soft btn-sketch bg-lime px-2 py-0.5 font-bold text-[#12171f]">always allow</button>
+            <button onClick={() => answerPerm(true, false)} className="hd-soft btn-sketch bg-paper2 px-2 py-0.5">allow once</button>
+            <button onClick={() => answerPerm(false, false)} className="hd-soft btn-sketch bg-paper3/70 px-2 py-0.5">block</button>
+          </div>
         )}
       </div>
 
@@ -2007,6 +2137,7 @@ export default function App() {
             {ctx.wcId && desktop && (
               <>
                 <CtxItem label="Save as PDF…" onClick={ctxRun(() => { void desktop?.savePdf(ctx.wcId, ctxTargetTab?.title || hostOf(ctxTargetTab?.url || "") || "page").then((ok) => toast(ok ? "PDF saved to Downloads" : "couldn't print this page", ok ? "var(--lime)" : "var(--red)", ok ? "download" : "x")); })} />
+              <CtxItem label="Print…" onClick={ctxRun(() => { void desktop?.printPage(ctx.wcId).then((ok) => { if (!ok) toast("couldn't open the print dialog", "var(--red)", "x"); }); })} />
                 <CtxItem label="Inspect element" onClick={ctxRun(() => { const el = ctx.key ? webviewMap.current.get(ctx.key) : undefined; try { (el as unknown as { openDevTools?: () => void })?.openDevTools?.(); } catch { /* gone */ } })} />
               </>
             )}
@@ -2018,6 +2149,11 @@ export default function App() {
       <Drawer open={drawer === "history"} title="the log" icon="history" onClose={() => setDrawer(null)}>
         <HistoryPanel
           history={history}
+          closed={closedTabs.map((t) => ({ url: t.url, title: t.title }))}
+          onReopenClosed={(i) => {
+            reopenClosedAt(i);
+            setDrawer(null);
+          }}
           onOpen={(u) => {
             go(u);
             setDrawer(null);
@@ -2060,6 +2196,8 @@ export default function App() {
           tab={tab}
           settings={settings}
           setSettings={setSettings}
+          perms={permRules}
+          onRevokePerm={(h) => setPermRules((r) => { const next = { ...r }; delete next[h]; return next; })}
           blockedTotal={stats.total}
           byCat={stats.byCat}
           allow={tab?.allow || []}
@@ -2120,7 +2258,7 @@ export default function App() {
         />
       </Drawer>
       <Drawer open={drawer === "downloads"} title="downloads" icon="download" onClose={() => setDrawer(null)}>
-        <DownloadsPanel items={downloads} />
+        <DownloadsPanel items={downloads} onControl={(id, a) => desktop?.dlControl(id, a)} />
       </Drawer>
       <Drawer open={drawer === "settings"} title="settings" icon="gear" onClose={() => setDrawer(null)}>
         <SettingsPanel
