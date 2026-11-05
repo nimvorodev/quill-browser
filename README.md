@@ -2,7 +2,7 @@
 
 # Quill
 
-**the hand-written private browser** · Windows 10/11 · no account · no telemetry
+**the hand-written private browser**
 
 > Reading the web should feel like reading. Not dodging cookie banners while
 > an ad reshuffles the page under your cursor.
@@ -33,9 +33,9 @@ no cloud to sync to, and no telemetry.
 |  |  |
 | --- | --- |
 | ![Wikipedia's main page re-inked as a ruled-paper notebook page](docs/img/reinked.png) | ![Quill's start page with a shelf of sites, sticky notes and today's blocked count](docs/img/homepage.png) |
-| **re-ink** turns any article into paper — type, images, a table of contents and a tracker audit. | **the start page is a desk** — a shelf you arrange, a dog-eared read-later queue, sticky notes and today's blocked count. |
+| **re-ink** turns any article into paper — type, images, a table of contents and a tracker audit. | **the start page is a desk**, a shelf you arrange, a dog-eared read-later queue, sticky notes and today's blocked count. |
 | ![Hand-drawn marker annotations over the original Wikipedia page](docs/img/scribble.png) | ![A YouTube video playing in Quill's tube desk with an up-next list](docs/img/tubedesk.png) |
-| **write on the page** with the marker or highlighter, then save the doodle as a PNG. | **the tube desk** — YouTube with search, up next and a sleep timer, played through a privacy embed. |
+| **write on the page** with the marker or highlighter, then save the doodle as a PNG. | **the tube desk**, YouTube with search, up next and a sleep timer, played through a privacy embed. |
 
 More at [nimvorodev.github.io/quill-browser](https://nimvorodev.github.io/quill-browser/#shots).
 
@@ -174,7 +174,7 @@ first public release and works as a daily browser on Windows. Known gaps:
   install the new build yourself.
 - The installer is unsigned, so SmartScreen warns on first run.
 - No macOS or Linux builds yet.
-- No extensions, no sync, no account system — the last one is deliberate.
+- No extensions, no sync.
 
 ## Contributing
 
