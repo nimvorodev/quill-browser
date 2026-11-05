@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld("quill", {
   setDoh: (v) => ipcRenderer.invoke("quill:set-doh", v === true),
   onFrameTitle: on("quill:frame-title"),
   savePdf: (wcId, name) => ipcRenderer.invoke("quill:save-pdf", Number(wcId) || 0, String(name || "")),
+  saveHtml: (html, name) => ipcRenderer.invoke("quill:save-html", String(html || ""), String(name || "")),
+  toggleFullscreen: () => ipcRenderer.invoke("quill:toggle-fullscreen"),
 
   /** Menu accelerators & popups from web content arrive here. */
   onCommand: on("quill:cmd", (v) => String(v || "")),

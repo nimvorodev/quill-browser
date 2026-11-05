@@ -318,6 +318,35 @@ function createWindow() {
     } catch {
       /* already debugging this webview (devtools open) — skip */
     }
+    // Keys typed inside the guest never reach the host page's keydown
+    // handler, so every renderer shortcut would be dead while browsing.
+    // before-input-event is browser-level (a page cannot spoof it) and
+    // preventDefault keeps the guest from also acting on the key.
+    wc.on("before-input-event", (e, input) => {
+      if (input.type !== "keyDown") return;
+      const mod = input.control || input.meta;
+      const key = input.key || "";
+      let cmd = null;
+      if (!mod) {
+        if (key === "F5") cmd = "key:f5";
+        else if (key === "F11") cmd = "key:f11";
+        else if (key === "F12") cmd = "key:f12";
+      } else if (!input.shift) {
+        if (/^[1-9]$/.test(key)) cmd = `key:num-${key}`;
+        else if (key === "0") cmd = "key:zoom-reset";
+        else if (key === "=" || key === "+") cmd = "key:zoom-in";
+        else if (key === "-") cmd = "key:zoom-out";
+        else if (key.toLowerCase() === "s") cmd = "key:save-page";
+        else if (key === "Tab") cmd = "key:next-tab";
+      } else {
+        if (key.toLowerCase() === "t") cmd = "key:reopen-tab";
+        else if (key === "Tab") cmd = "key:prev-tab";
+      }
+      if (cmd) {
+        e.preventDefault();
+        win?.webContents.send("quill:cmd", cmd);
+      }
+    });
     wc.setWindowOpenHandler(({ url }) => {
       // The popup blocker for webviews: pop-ups from web content become a new
       // Quill tab — unless the URL is an ad, in which case it dies here
@@ -495,6 +524,30 @@ ipcMain.handle("quill:save-pdf", async (_e, wcId, name) => {
     rememberDownload(savePath);
     // Reuse the downloads drawer: it lands there as a finished download.
     win?.webContents.send("quill:download", { id: `pdf-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: data.length, total: data.length, state: "completed" });
+    return true;
+  } catch {
+    return false;
+  }
+});
+ipcMain.handle("quill:save-html", async (_e, html, name) => {
+  // The renderer supplies the page HTML it already holds in memory; the
+  // filename is re-sanitised and the file never leaves the Downloads folder.
+  try {
+    if (typeof html !== "string" || !html.trim()) return false;
+    const safe = (String(name || "").replace(/[^\w\- .]+/g, "").trim().slice(0, 80)) || "page";
+    let savePath = path.join(app.getPath("downloads"), `${safe}.html`);
+    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${safe} (${i}).html`);
+    fs.writeFileSync(savePath, html, "utf8");
+    rememberDownload(savePath);
+    win?.webContents.send("quill:download", { id: `html-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: Buffer.byteLength(html), total: Buffer.byteLength(html), state: "completed" });
+    return true;
+  } catch {
+    return false;
+  }
+});
+ipcMain.handle("quill:toggle-fullscreen", () => {
+  try {
+    win?.setFullScreen(!win.isFullScreen());
     return true;
   } catch {
     return false;

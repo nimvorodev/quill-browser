@@ -248,6 +248,8 @@ export default function App() {
   const [findInfo, setFindInfo] = useState({ active: 0, matches: 0 });
   // Every mounted live webview, keyed by tab id: the active tab's is the find/PDF target.
   const webviewMap = useRef<Map<string, WebviewEl>>(new Map());
+  /** Ctrl+Shift+T reopens from here (last 10 closed tabs, in-memory only). */
+  const closedRef = useRef<Tab[]>([]);
   const onFoundInPage = useCallback((info: { active: number; matches: number }) => setFindInfo(info), []);
   /* ---------------- live-view keep-alive ----------------
      The active tab's live view renders in a persistent layer (like the tube
@@ -373,6 +375,46 @@ export default function App() {
     const ok = await desktop.savePdf(el.getWebContentsId(), tab.title || hostOf(tab.url));
     toast(ok ? "PDF saved to Downloads" : "couldn't print this page", ok ? "var(--lime)" : "var(--red)", ok ? "download" : "x");
   }, [tab, toast]);
+  /** Ctrl+S — save what the tab is showing: the live page's DOM, or the srcDoc HTML Quill already holds. */
+  const savePageHtml = useCallback(async () => {
+    if (!tab || tab.url === HOME) return;
+    const name = (hostOf(tab.url) || "page").replace(/[^\w.-]+/g, "_");
+    let html = "";
+    const el = webviewMap.current.get(tab.id);
+    if (el) {
+      try {
+        html = String((await el.executeJavaScript("document.documentElement.outerHTML")) || "");
+      } catch {
+        html = "";
+      }
+    }
+    if (!html) html = tab.article?.cleanHtml || tab.article?.rawHtml || "";
+    if (!html || !desktop) return toast("nothing to save yet — let the page load", "var(--orange)", "info");
+    const ok = await desktop.saveHtml(html, name);
+    toast(ok ? "page saved to Downloads" : "couldn't save this page", ok ? "var(--lime)" : "var(--red)", ok ? "download" : "x");
+  }, [tab, desktop, toast]);
+  /** Shared by the host keydown handler and the guest key relay (quill:cmd). */
+  const reopenClosedTab = useCallback(() => {
+    const last = closedRef.current.pop();
+    if (last) {
+      setTabs((ts) => [...ts, last]);
+      setActiveId(last.id);
+    }
+  }, []);
+  const cycleTab = useCallback(
+    (dir: number) => {
+      const i = tabs.findIndex((t) => t.id === activeId);
+      if (i >= 0 && tabs.length > 1) setActiveId(tabs[(i + dir + tabs.length) % tabs.length].id);
+    },
+    [tabs, activeId],
+  );
+  const openGuestDevtools = useCallback(() => {
+    try {
+      (webviewMap.current.get(activeId) as unknown as { openDevTools?: () => void } | undefined)?.openDevTools?.();
+    } catch {
+      /* webview gone */
+    }
+  }, [activeId]);
   /* ---------------- backup / restore ---------------- */
   const exportBackup = useCallback(() => {
     const payload = { v: 1 as const, at: Date.now(), settings, history, bookmarks, notes, later, siteViews, popupHosts };
@@ -642,6 +684,12 @@ export default function App() {
       abortTabFetch(id);
       reqGenRef.current.delete(id);
       setTabs((ts) => {
+        // Ctrl+Shift+T reopens the last closed tab (stack of 10, in-memory).
+        const closing = ts.find((t) => t.id === id);
+        if (closing) {
+          closedRef.current.push(closing);
+          if (closedRef.current.length > 10) closedRef.current.shift();
+        }
         if (ts.length === 1) {
           const fresh = newTab(settings.ghostDefault, origFor(settings.defaultView));
           setActiveId(fresh.id);
@@ -915,6 +963,30 @@ export default function App() {
       window.removeEventListener("contextmenu", onApp);
     };
   }, []);
+
+  // Drag a URL (or plain text) from anywhere onto the window: navigate the
+  // active tab — like every browser. Internal drags (tab strip, shelf tiles)
+  // carry no text payload, so they fall through untouched.
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      const types = e.dataTransfer?.types;
+      if (types && (types.includes("text/uri-list") || types.includes("text/plain"))) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      const raw = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").trim().split(/\r?\n/)[0].trim();
+      if (!raw) return;
+      e.preventDefault();
+      if (tab) navigate(tab, raw);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [tab, navigate]);
   const closeCtx = () => setCtx(null);
   useEffect(() => {
     if (!ctx) return;
@@ -1048,6 +1120,23 @@ export default function App() {
     else if (cmd === "palette") setPalette((p) => !p);
     else if (cmd === "find") setFindOpen(true);
     else if (cmd === "save-pdf") void savePdf();
+    // Guest-key relay (main.cjs before-input-event): the same shortcuts the
+    // host keydown handles, delivered while a webview holds the focus.
+    else if (cmd === "key:f5") reload();
+    else if (cmd === "key:f11") void desktop?.toggleFullscreen();
+    else if (cmd === "key:f12") openGuestDevtools();
+    else if (cmd === "key:save-page") void savePageHtml();
+    else if (cmd === "key:reopen-tab") reopenClosedTab();
+    else if (cmd === "key:next-tab") cycleTab(1);
+    else if (cmd === "key:prev-tab") cycleTab(-1);
+    else if (cmd === "key:zoom-reset") { if (tab) applyZoom(100); }
+    else if (cmd === "key:zoom-in") { if (tab) applyZoom(Math.min(160, tab.zoom + 10)); }
+    else if (cmd === "key:zoom-out") { if (tab) applyZoom(Math.max(70, tab.zoom - 10)); }
+    else if (cmd.startsWith("key:num-")) {
+      const n = cmd.slice("key:num-".length);
+      const target = n === "9" ? tabs[tabs.length - 1] : tabs[Number(n) - 1];
+      if (target) setActiveId(target.id);
+    }
   };
   openUrlRef.current = ({ url, from }) => {
     // Pop-ups (window.open / target=_blank from web content) expect a real
@@ -1086,6 +1175,22 @@ export default function App() {
     const mod = e.metaKey || e.ctrlKey;
     const typing = /input|textarea|select/i.test((e.target as HTMLElement)?.tagName || "");
     if (!mod) {
+      // Plain function keys, browser conventions.
+      if (e.key === "F5") {
+        e.preventDefault();
+        reload();
+        return;
+      }
+      if (e.key === "F11" && desktop) {
+        e.preventDefault();
+        void desktop.toggleFullscreen();
+        return;
+      }
+      if (e.key === "F12" && desktop) {
+        e.preventDefault();
+        openGuestDevtools();
+        return;
+      }
       // Focus mode joins "anything that's open" for Esc — but only when it's
       // the outermost open thing (find bar, scribble, drawers, palette first)
       // and nothing is being typed into (Esc in the address bar reverts that).
@@ -1120,9 +1225,15 @@ export default function App() {
     } else if (k === "p" && !e.shiftKey && !desktop) {
       e.preventDefault();
       void savePdf();
+    } else if (k === "t" && e.shiftKey) {
+      e.preventDefault();
+      reopenClosedTab();
     } else if (k === "t") {
       e.preventDefault();
       openNew();
+    } else if (k === "tab") {
+      e.preventDefault();
+      cycleTab(e.shiftKey ? -1 : 1);
     } else if (k === "w") {
       e.preventDefault();
       if (tab) closeTab(tab.id);
@@ -1144,6 +1255,9 @@ export default function App() {
     } else if (k === "e" && !typing) {
       e.preventDefault();
       if (tab && tab.url !== HOME) setTabView(tab.view === "reader" ? "original" : "reader");
+    } else if (k === "s" && !e.shiftKey && !typing) {
+      e.preventDefault();
+      void savePageHtml();
     } else if (k === "s" && e.shiftKey) {
       e.preventDefault();
       setScribble((s) => !s);
