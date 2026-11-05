@@ -748,8 +748,9 @@ export default function App() {
   const openLocalFile = useCallback(async () => {
     const p = await desktop?.openFile();
     // The dialog returns a bare Windows path — make it a real file: URL
-    // (encodeURI covers spaces/unicode; # and ? are left alone by it but
-    // would truncate the URL, so defuse those too).
+    // (encodeURI covers spaces/unicode and escapes a literal % correctly;
+    // # and ? are left alone by it but would truncate the URL, so defuse
+    // those after).
     if (p) go(encodeURI(`file:///${p.replace(/\\/g, "/")}`).replace(/#/g, "%23").replace(/\?/g, "%3F"));
   }, [desktop, go]);
 
@@ -1417,6 +1418,12 @@ export default function App() {
   // Keep the session on disk, without ghost tabs.
   useEffect(() => {
     if (!settings.restoreSession) return;
+    // Secondary windows (#fresh, Ctrl+N) must NOT write the session — all
+    // windows share one localStorage key, so the last writer wins and a
+    // fresh window's single tab would wipe the primary window's tabs.
+    // ponytail: ceiling — secondary-window tabs aren't persisted; merge
+    // sessions per window only if that ever matters.
+    if (location.hash.includes("fresh")) return;
     const t = window.setTimeout(() => {
       try {
         const keep = tabs.filter((x) => !x.ghost);
