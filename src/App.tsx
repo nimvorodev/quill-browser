@@ -747,7 +747,10 @@ export default function App() {
   /** Ctrl+O — pick a local file and open it in a tab. */
   const openLocalFile = useCallback(async () => {
     const p = await desktop?.openFile();
-    if (p) go(p);
+    // The dialog returns a bare Windows path — make it a real file: URL
+    // (encodeURI covers spaces/unicode; # and ? are left alone by it but
+    // would truncate the URL, so defuse those too).
+    if (p) go(encodeURI(`file:///${p.replace(/\\/g, "/")}`).replace(/#/g, "%23").replace(/\?/g, "%3F"));
   }, [desktop, go]);
 
   const openNew = useCallback(

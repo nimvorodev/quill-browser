@@ -242,7 +242,12 @@ export function BookmarksPanel({
               </button>
             )}
             <button
-              onClick={() => setEditing({ url: b.url, text: b.title })}
+              onClick={() => {
+                // Commit any in-flight edit first — switching rows unmounts
+                // the old input and would silently drop the draft.
+                commitRename();
+                setEditing({ url: b.url, text: b.title });
+              }}
               className="shrink-0 text-ink3 opacity-0 transition group-hover:opacity-100 hover:text-cyan"
               title="Rename"
             >
