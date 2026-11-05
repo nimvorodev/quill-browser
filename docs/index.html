@@ -68,6 +68,44 @@
   .shot img { width: 100%; height: 320px; object-fit: contain; background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; cursor: zoom-in; }
   .shot a:hover img { opacity: .9; }
   .shot figcaption { font-size: 13px; color: var(--ink3); text-align: center; padding: 8px 4px 0; }
+
+  /* entrance cascade */
+  @keyframes quillUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  .topbar, h1, .tag, blockquote.shout, .diff, .trust, .card, footer {
+    animation: quillUp .7s cubic-bezier(.2, .7, .3, 1) backwards;
+  }
+  .topbar { animation-delay: .05s; }
+  h1 { animation-delay: .10s; }
+  .tag { animation-delay: .18s; }
+  blockquote.shout { animation-delay: .26s; }
+  .diff { animation-delay: .34s; }
+  .trust { animation-delay: .5s; }
+  .card:nth-child(1) { animation-delay: .6s; }
+  .card:nth-child(2) { animation-delay: .68s; }
+  .card:nth-child(3) { animation-delay: .76s; }
+  .card:nth-child(4) { animation-delay: .84s; }
+  .shots { animation: quillUp .7s .95s backwards; }
+  footer { animation-delay: 1.05s; }
+
+  /* paper-lift hover */
+  .card, .shot { transition: transform .18s ease, box-shadow .18s ease; }
+  .card:hover, .shot:hover { transform: translateY(-3px); box-shadow: 5px 5px 0 rgba(31, 36, 48, 0.22); }
+
+  /* download button: gentle float to draw the eye */
+  @keyframes quillBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  .btn {
+    animation: quillUp .7s .42s backwards, quillBob 3.2s 1.8s ease-in-out infinite;
+    transition: box-shadow .18s ease, background .18s ease;
+  }
+  .btn:hover { box-shadow: 6px 6px 0 var(--ink); animation-play-state: paused; }
+
+  /* screenshot warm-zoom */
+  .shot img { transition: transform .2s ease; }
+  .shot a:hover img { transform: scale(1.03); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
   footer { margin-top: 46px; padding-top: 18px; border-top: 2px dashed var(--ink); color: var(--ink3); font-size: 13.5px; text-align: center; }
 </style>
 </head>
