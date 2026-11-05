@@ -46,25 +46,11 @@ npm run dev:desktop
 # desktop, production build
 npm run start:desktop
 
-# Windows installer -> release/Quill-Setup-1.0.0.exe
+# Windows installer
 npm run dist:win
 ```
 
 Requires Node 20+.
-
-## Security posture
-
-- Web content never runs in the app renderer. Every page goes into a
-  sandboxed `<webview>` in its own persisted partition (`persist:quill-web`),
-  hardened in `will-attach-webview`: `nodeIntegration` off,
-  `contextIsolation` on, `sandbox` on, insecure content blocked.
-- The app window itself only ever loads the bundled app; `window.open` from
-  web content goes to the system browser.
-- Ad/tracker hosts are blocked at the network layer for the webview
-  partition, not with cosmetic rules.
-- The renderer exposes a small allow-listed bridge (`window.quill`):
-  window controls, downloads, screenshots, validated in the main process.
-  No raw IPC, no filesystem, no Node from pages.
 
 ## Layout
 
@@ -74,18 +60,6 @@ electron/       main process + preload bridge
 build/          icons, entitlements
 ```
 
-## Notes
-
-- Relay-based reader mode depends on public services (r.jina.ai and
-  fallbacks); when they rate-limit, the reader falls back and the live page
-  is always one click away.
-- YouTube ad blocking uses a param-level request filter plus a
-  JSON-patching scriptlet in the real page. It is not uBlock-grade; some ads
-  can slip through.
-
 ## License
 
-[Mozilla Public License 2.0](LICENSE) (MPL-2.0), file-level copyleft, the same
-license Firefox and Brave use. Open source, permits commercial use and a
-future paid tier; modifications to Quill's own files must stay MPL-2.0.
-Electron and its dependencies keep their own (MIT/BSD/etc.) licenses.
+[Mozilla Public License 2.0](LICENSE)
