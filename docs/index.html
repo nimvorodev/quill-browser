@@ -134,8 +134,35 @@
   .demo-hint { text-align: center; font-size: 14px; color: var(--ink2); margin: 18px 0 0; }
   .demo-hint b { color: var(--ink); font-weight: 600; }
 
+  .minis { margin: 96px 0 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; border-top: 1px solid var(--rule); padding-top: 64px; }
+  .demo-card { position: relative; background: var(--paper2); border: 2px solid var(--ink); border-radius: 16px 18px 16px 18px; box-shadow: var(--shadow); padding: 22px 24px; min-height: 232px; overflow: hidden; }
+  .mini-tag { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink3); }
+  .mini-title { font-family: var(--serif); font-size: 22px; font-weight: 600; margin: 6px 0 12px; letter-spacing: -0.01em; }
+  .wline { font-size: 15px; color: var(--ink2); line-height: 1.6; margin: 0 0 8px; max-width: 42ch; }
+  .mark { background-image: linear-gradient(to bottom, transparent 8%, color-mix(in srgb, var(--accent-soft) 95%, transparent) 12%, color-mix(in srgb, var(--accent-soft) 95%, transparent) 88%, transparent 92%); background-size: 0% 100%; background-repeat: no-repeat; padding: 0 .12em; border-radius: 2px; }
+  @keyframes markSweep { to { background-size: 100% 100%; } }
+  #writeDemo.sweep .mark { animation: markSweep .9s cubic-bezier(.22, 1, .36, 1) forwards; }
+  .pin { position: absolute; right: 20px; bottom: 22px; font-size: 14px; padding: 9px 14px; background: color-mix(in srgb, var(--accent) 30%, var(--paper2)); border: 1px solid var(--accent); border-radius: 4px 14px 6px 16px; box-shadow: 4px 4px 0 rgba(26, 36, 64, .12); transform: rotate(-2deg) scale(.6); opacity: 0; max-width: 190px; }
+  @keyframes pinPop { to { transform: rotate(-2deg) scale(1); opacity: 1; } }
+  #writeDemo.pin .pin { animation: pinPop .4s cubic-bezier(.34, 1.56, .64, 1) forwards; }
+
+  .deskwrap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .desk-video { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #16181f; border-radius: 12px; padding: 22px 10px; color: #c9cbd4; }
+  .eq { display: flex; align-items: flex-end; gap: 3px; height: 26px; }
+  .eq i { width: 4px; height: 6px; background: #8fd49a; border-radius: 2px; animation: eqb 1s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: .15s; }
+  .eq i:nth-child(3) { animation-delay: .3s; }
+  .eq i:nth-child(4) { animation-delay: .45s; }
+  @keyframes eqb { 0%, 100% { height: 6px; } 50% { height: 24px; } }
+  .vidlabel { font-size: 12px; color: #c9cbd4; }
+  .desk-read { background: var(--paper); border: 2px solid var(--ink); border-radius: 10px; padding: 12px 14px; }
+  .dr-title { display: block; font-family: var(--serif); font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+  .dr-line { display: block; height: 7px; background: color-mix(in srgb, var(--ink2) 32%, transparent); border-radius: 4px; margin-bottom: 7px; }
+  .dr-line.short { width: 60%; }
+  .adfree { display: inline-block; margin-top: 14px; font-size: 12px; color: var(--ink2); background: color-mix(in srgb, var(--accent-soft) 60%, transparent); border-radius: 999px; padding: 3px 10px; }
+
   @media (max-width: 720px) {
-    .features, .shots { grid-template-columns: 1fr; }
+    .features, .shots, .minis { grid-template-columns: 1fr; }
     .feature p { max-width: none; }
     main { padding-top: 48px; }
     .actions { flex-direction: column; align-items: stretch; }
@@ -226,6 +253,34 @@
       </div>
     </section>
 
+    <section class="minis">
+      <p class="section-label">watch it move</p>
+      <div class="demo-card" id="writeDemo">
+        <span class="mini-tag">write on it</span>
+        <h3 class="mini-title">Mark the good parts.</h3>
+        <p class="wline">Some sentences deserve <span class="mark">a highlighter</span> more than an address bar ever does.</p>
+        <p class="wline">Scribble over anything, save the doodle, and pin the bits you want to keep.</p>
+        <div class="pin">pinned: “keep this one”</div>
+      </div>
+      <div class="demo-card">
+        <span class="mini-tag">the desk</span>
+        <h3 class="mini-title">Keeps playing while you read.</h3>
+        <div class="deskwrap">
+          <div class="desk-video">
+            <span class="eq"><i></i><i></i><i></i><i></i></span>
+            <span class="vidlabel">▶ kind of blue · a study playlist</span>
+          </div>
+          <div class="desk-read">
+            <span class="dr-title">The library that survived</span>
+            <span class="dr-line"></span>
+            <span class="dr-line"></span>
+            <span class="dr-line short"></span>
+          </div>
+        </div>
+        <span class="adfree">ad-free · it keeps going</span>
+      </div>
+    </section>
+
     <section class="shots" id="shots">
       <p class="section-label">it looks like this</p>
       <figure class="shot"><a href="img/homepage.png" target="_blank" rel="noopener" title="open full size"><img src="img/homepage.png" alt="The Quill start page, notes and read-later on paper" /></a><figcaption>the start page. your notes and read-later.</figcaption></figure>
@@ -278,6 +333,21 @@
       }, { threshold: 0.35 });
       io.observe(stage);
     }
+  })();
+
+  // Write-demo loop: sweep a highlighter over the phrase, pin the note, reset, repeat.
+  (function runWrite() {
+    var d = document.getElementById("writeDemo");
+    if (!d) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    function step() {
+      d.classList.remove("sweep", "pin");
+      void d.offsetWidth; // restart the CSS animations
+      d.classList.add("sweep");
+      setTimeout(function () { d.classList.add("pin"); }, 950);
+      setTimeout(step, 4400);
+    }
+    setTimeout(step, 800);
   })();
 </script>
 </body>
