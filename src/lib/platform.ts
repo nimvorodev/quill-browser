@@ -52,6 +52,8 @@ export interface DesktopBridge {
   saveHtml(html: string, name: string): Promise<boolean>;
   /** Toggle app fullscreen (F11). */
   toggleFullscreen(): Promise<boolean>;
+  /** Installed app version (package.json) — "check for updates" compares it. */
+  version(): Promise<string>;
   /** Open the OS print dialog for a webview page. */
   printPage(webContentsId: number): Promise<boolean>;
   /** Open a local file (system picker); returns the chosen path or null. */

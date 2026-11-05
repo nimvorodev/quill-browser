@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld("quill", {
     typeof v === "object" && v !== null ? { id: String(v.id || ""), host: String(v.host || ""), permission: String(v.permission || "") } : null,
   ),
   toggleFullscreen: () => ipcRenderer.invoke("quill:toggle-fullscreen"),
+  version: () => ipcRenderer.invoke("quill:version").then(String),
 
   /** Menu accelerators & popups from web content arrive here. */
   onCommand: on("quill:cmd", (v) => String(v || "")),

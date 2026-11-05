@@ -625,6 +625,7 @@ ipcMain.handle("quill:clear-browsing-data", async () => {
   }
 });
 ipcMain.handle("quill:blocked-count", () => blockedCount);
+ipcMain.handle("quill:version", () => app.getVersion());
 /** Screenshot of the whole app window (page + scribble overlay) as a PNG data URL. */
 ipcMain.handle("quill:capture-page", async (e) => {
   const w = BrowserWindow.fromWebContents(e.sender);

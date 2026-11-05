@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { Icon } from "./Icons";
 import { type SearchEngine } from "../lib/nav";
 import { SearchBox } from "./SearchBox";
+import { desktop } from "../lib/platform";
+import { checkForUpdates, isNewer } from "../lib/updates";
 import { NOTE_COLORS, StickyNote } from "./StickyNote";
 import { uid, useNow, NOTE_DEFAULT_H, NOTE_DEFAULT_W, type Bookmark, type HistoryEntry, type LaterItem, type Note, type ShelfItem } from "../lib/store";
 import { CAT_LABEL, CAT_COLOR, type Category } from "../lib/filters";
@@ -464,6 +466,37 @@ export function StartPage({
           </div>
         </aside>
       </div>
+      <UpdatesRow />
+    </div>
+  );
+}
+
+/* ---------------- check for updates ---------------- */
+/** Manual GitHub-release check — compares against the installed version. */
+function UpdatesRow() {
+  const [state, setState] = useState<"idle" | "checking" | "ok" | "outdated">("idle");
+  const [latest, setLatest] = useState<{ url: string } | null>(null);
+  const check = async () => {
+    setState("checking");
+    const [cur, res] = await Promise.all([desktop?.version().catch(() => "") ?? "", checkForUpdates()]);
+    // Offline / rate-limited silently returns to idle — don't alarm on a v1 check.
+    if (!res?.latest || !cur) return setState("idle");
+    setLatest({ url: res.url || "" });
+    setState(isNewer(res.latest, cur) ? "outdated" : "ok");
+  };
+  return (
+    <div className="mt-5 flex items-center justify-center gap-2 border-t border-dashed border-ink/20 pt-4 text-[13.5px] text-ink3">
+      {state === "outdated" && latest?.url ? (
+        <button onClick={() => void desktop?.openExternal(latest.url)} className="underline decoration-wavy decoration-yellow underline-offset-2 hover:text-ink">
+          v{latest.url.split("/").pop()} — a newer Quill is out, grab it
+        </button>
+      ) : state === "ok" ? (
+        <span className="italic">you're on the latest Quill ✦</span>
+      ) : (
+        <button onClick={() => void check()} disabled={state === "checking"} className="hover:text-ink disabled:opacity-50">
+          {state === "checking" ? "checking…" : "check for updates"}
+        </button>
+      )}
     </div>
   );
 }
