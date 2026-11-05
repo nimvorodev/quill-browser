@@ -90,4 +90,7 @@ build/          icons, entitlements
 
 ## License
 
-All rights reserved for now — a proper LICENSE file is on the to-do list.
+[Mozilla Public License 2.0](LICENSE) (MPL-2.0) — file-level copyleft, the same
+license Firefox and Brave use. Open source, permits commercial use and a
+future paid tier; modifications to Quill's own files must stay MPL-2.0.
+Electron and its dependencies keep their own (MIT/BSD/etc.) licenses.
