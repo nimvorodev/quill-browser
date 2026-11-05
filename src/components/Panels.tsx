@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./Icons";
 import { ENGINES, SHELF, prettyUrl, hostOf } from "../lib/nav";
 import { desktop, type DownloadItem } from "../lib/platform";
@@ -140,17 +140,26 @@ export function HistoryPanel({
 
 /* ---------------- bookmarks ---------------- */
 export function BookmarksPanel({
-  bookmarks, onOpen, onRemove, onAdd, currentUrl, currentTitle,
+  bookmarks, onOpen, onRemove, onAdd, onRename, onMove, currentUrl, currentTitle,
 }: {
   bookmarks: Bookmark[];
   onOpen: (url: string) => void;
   onRemove: (url: string) => void;
   onAdd: (b: Bookmark) => void;
+  onRename: (url: string, title: string) => void;
+  onMove: (url: string, dir: -1 | 1) => void;
   currentUrl: string;
   currentTitle: string;
 }) {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
+  // Inline rename: the url being edited + its draft text.
+  const [editing, setEditing] = useState<{ url: string; text: string } | null>(null);
+  const renameInput = useRef<HTMLInputElement>(null);
+  const commitRename = () => {
+    if (editing && editing.text.trim()) onRename(editing.url, editing.text.trim());
+    setEditing(null);
+  };
   return (
     <div className="p-3">
       <div className="hd mb-3 bg-paper3/40 p-2.5">
@@ -192,12 +201,52 @@ export function BookmarksPanel({
         )}
       </div>
       <div className="space-y-1">
-        {bookmarks.map((b) => (
+        {bookmarks.map((b, i) => (
           <div key={b.url} className="group flex items-center gap-2 border-b border-dashed border-ink/20 py-1.5">
+            <div className="flex shrink-0 flex-col">
+              <button
+                onClick={() => onMove(b.url, -1)}
+                disabled={i === 0}
+                className="grid h-[14px] w-4 place-items-center text-ink3 hover:text-ink disabled:opacity-25"
+                title="Move up"
+              >
+                <Icon name="chevUp" size={12} />
+              </button>
+              <button
+                onClick={() => onMove(b.url, 1)}
+                disabled={i === bookmarks.length - 1}
+                className="grid h-[14px] w-4 place-items-center text-ink3 hover:text-ink disabled:opacity-25"
+                title="Move down"
+              >
+                <Icon name="chevDown" size={12} />
+              </button>
+            </div>
             <Icon name={b.doodle || "star"} size={16} className="shrink-0 text-ink2" />
-            <button onClick={() => onOpen(b.url)} className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-[17px] hover:underline decoration-wavy decoration-cyan underline-offset-4">{b.title}</span>
-              <span className="block truncate text-[13px] text-ink3">{prettyUrl(b.url)}</span>
+            {editing?.url === b.url ? (
+              <input
+                ref={renameInput}
+                autoFocus
+                value={editing.text}
+                onChange={(e) => setEditing({ url: b.url, text: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  else if (e.key === "Escape") setEditing(null);
+                }}
+                onBlur={commitRename}
+                className="hd-soft min-w-0 flex-1 bg-paper2 px-1 py-0.5 text-[16px]"
+              />
+            ) : (
+              <button onClick={() => onOpen(b.url)} className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-[17px] hover:underline decoration-wavy decoration-cyan underline-offset-4">{b.title}</span>
+                <span className="block truncate text-[13px] text-ink3">{prettyUrl(b.url)}</span>
+              </button>
+            )}
+            <button
+              onClick={() => setEditing({ url: b.url, text: b.title })}
+              className="shrink-0 text-ink3 opacity-0 transition group-hover:opacity-100 hover:text-cyan"
+              title="Rename"
+            >
+              <Icon name="pen" size={14} />
             </button>
             <button onClick={() => onRemove(b.url)} className="shrink-0 text-ink3 opacity-0 transition group-hover:opacity-100 hover:text-red" title="Remove">
               <Icon name="trash" size={14} />

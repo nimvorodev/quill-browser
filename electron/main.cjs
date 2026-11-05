@@ -46,7 +46,7 @@ const permRules = new Map();
 const pendingPerms = new Map();
 const PERM_AUTO = new Set(["fullscreen", "clipboard-sanitized-write", "pointerLock"]);
 // Only these ever prompt — everything else is denied without asking.
-const PERM_PROMPTABLE = new Set(["media", "geolocation", "notifications", "midi"]);
+const PERM_PROMPTABLE = new Set(["media", "geolocation", "notifications", "midi", "display-capture", "clipboard-read"]);
 function sendAll(channel, payload) {
   for (const w of wins) {
     try {

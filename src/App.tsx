@@ -65,6 +65,8 @@ const PERM_LABEL: Record<string, string> = {
   geolocation: "location",
   notifications: "notifications",
   midi: "MIDI devices",
+  "display-capture": "your screen",
+  "clipboard-read": "your clipboard",
 };
 
 const newTab = (ghost: boolean, origSub: OriginalSubMode = "shielded"): Tab => ({
@@ -2173,6 +2175,17 @@ export default function App() {
             setDrawer(null);
           }}
           onRemove={(u) => setBookmarks((bs) => bs.filter((b) => b.url !== u))}
+          onRename={(u, t) => setBookmarks((bs) => bs.map((b) => (b.url === u ? { ...b, title: t } : b)))}
+          onMove={(u, dir) =>
+            setBookmarks((bs) => {
+              const i = bs.findIndex((b) => b.url === u);
+              const j = i + dir;
+              if (i < 0 || j < 0 || j >= bs.length) return bs;
+              const next = [...bs];
+              [next[i], next[j]] = [next[j], next[i]];
+              return next;
+            })
+          }
           onAdd={(b) => {
             setBookmarks((bs) => (bs.some((x) => x.url === b.url) ? bs : [b, ...bs]));
             toast("dog-eared ⭐", "var(--yellow)", "star");

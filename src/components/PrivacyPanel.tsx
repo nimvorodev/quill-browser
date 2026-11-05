@@ -12,6 +12,8 @@ const PERM_LABEL: Record<string, string> = {
   geolocation: "location",
   notifications: "notifications",
   midi: "MIDI devices",
+  "display-capture": "screen sharing",
+  "clipboard-read": "clipboard reading",
 };
 
 function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
