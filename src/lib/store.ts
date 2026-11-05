@@ -104,6 +104,23 @@ export function useLocal<T>(key: string, initial: T) {
       return initial;
     }
   });
+  // Multi-window sync: another Quill window writing the same key updates this
+  // one (the storage event never fires in the window that wrote). Without it,
+  // two windows silently fork bookmarks/permissions/settings — last writer wins.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== PREFIX + key || e.newValue == null) return;
+      try {
+        const parsed = JSON.parse(e.newValue) as T;
+        ref.current = parsed;
+        setState(parsed);
+      } catch {
+        /* keep the local copy */
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [key]);
   const set = useCallback(
     (v: T | ((p: T) => T)) => {
       setState((prev) => {

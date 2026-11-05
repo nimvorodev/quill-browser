@@ -222,6 +222,13 @@ export default function App() {
     if (!desktop?.onPermRequest) return;
     return desktop.onPermRequest((r) => setPermReq(r));
   }, []);
+  // Main auto-denies an unanswered prompt after 30s — mirror that here so
+  // the banner doesn't linger with dead buttons after the request is gone.
+  useEffect(() => {
+    if (!permReq) return;
+    const t = window.setTimeout(() => setPermReq(null), 30500);
+    return () => window.clearTimeout(t);
+  }, [permReq]);
   const answerPerm = (allow: boolean, always: boolean) => {
     if (!permReq) return;
     void desktop?.permRespond(permReq.id, allow, always, permReq.host, permReq.permission);
@@ -617,7 +624,7 @@ export default function App() {
 
   /** Core navigation: resolve the input (URL, bang or search), shield it, and set the right view. */
   const navigate = useCallback(
-    (target: Tab, raw: string, mode?: ViewMode, origSubOverride?: OriginalSubMode, engineId?: string) => {
+    (target: Tab, raw: string, mode?: ViewMode, origSubOverride?: OriginalSubMode, engineId?: string, allowOverride?: string[]) => {
       const chosen = engineById(engineId) ?? engine;
       let url = raw.startsWith("quill://") ? raw : normalize(raw, chosen);
       if (settings.httpsOnly) url = forceHttps(url);
@@ -657,7 +664,9 @@ export default function App() {
           ...t,
           url: raw,
           stack,
-          idx: stack.length - 1,
+          // Same-entry re-navigation keeps the pointer; stack.length - 1
+          // would silently walk into old forward entries.
+          idx: target.stack[target.idx] === raw ? target.idx : stack.length - 1,
           view: "original",
           originalMode: "live",
           title: pageTitleFor(raw),
@@ -674,7 +683,9 @@ export default function App() {
 
       if (!isUrl(raw)) pushRecent(raw);
 
-      const filters = filtersFor(target.allow, target.deny);
+      // allowOverride: the blocked-page "allow it" click patches tab.allow in
+      // the same tick — navigate would otherwise read the stale pre-patch list.
+      const filters = filtersFor(allowOverride ?? target.allow, target.deny);
       const clean = stripTrackingParams(url, filters);
       url = clean.url;
       const paramBlocked = clean.stripped;
@@ -700,7 +711,9 @@ export default function App() {
         ...t,
         url,
         stack,
-        idx: stack.length - 1,
+        // Same-entry re-navigation keeps the pointer where it is (see the
+        // view-source branch) — stack.length - 1 would walk forward entries.
+        idx: target.stack[target.idx] === url ? target.idx : stack.length - 1,
         view: hit ? "reader" : view,
         originalMode: sub,
         title,
@@ -730,9 +743,9 @@ export default function App() {
   );
 
   const go = useCallback(
-    (raw: string, mode?: ViewMode, tabId = activeId, origSub?: OriginalSubMode, engineId?: string) => {
+    (raw: string, mode?: ViewMode, tabId = activeId, origSub?: OriginalSubMode, engineId?: string, allowOverride?: string[]) => {
       const target = tabs.find((t) => t.id === tabId) || tab;
-      if (target) navigate(target, raw, mode, origSub, engineId);
+      if (target) navigate(target, raw, mode, origSub, engineId, allowOverride);
     },
     [tabs, tab, activeId, navigate],
   );
@@ -776,7 +789,9 @@ export default function App() {
       reqGenRef.current.delete(id);
       // Ctrl+Shift+T (and the history drawer) reopen from here — last 10, in-memory.
       const closing = tabs.find((t) => t.id === id);
-      if (closing) setClosedTabs((cs) => [...cs, closing].slice(-10));
+      // The snapshot must not carry a half-finished fetch — a tab closed
+      // mid-load would reopen stuck on the spinner forever.
+      if (closing) setClosedTabs((cs) => [...cs, { ...closing, loading: false, stage: null, stageNote: "" }].slice(-10));
       setTabs((ts) => {
         if (ts.length === 1) {
           const fresh = newTab(settings.ghostDefault, origFor(settings.defaultView));
@@ -800,6 +815,9 @@ export default function App() {
     for (const gone of tabs) if (!next.includes(gone)) {
       abortTabFetch(gone.id);
       reqGenRef.current.delete(gone.id);
+      // Culled tabs are closable too — they belong in the reopen list,
+      // or "close others" destroys them unrecoverably.
+      setClosedTabs((cs) => [...cs, { ...gone, loading: false, stage: null, stageNote: "" }].slice(-10));
     }
     setTabs(next);
     if (next.length !== tabs.length) toast(`${tabs.length - next.length} tab${tabs.length - next.length === 1 ? "" : "s"} closed`, "var(--red)", "close");
@@ -824,7 +842,9 @@ export default function App() {
       const i = tabs.findIndex((x) => x.id === id);
       if (i < 0) return;
       const t = tabs[i];
-      const copy = { ...newTab(t.ghost, t.originalMode), url: t.url, title: t.title, view: t.view, stack: [t.url], idx: 0 };
+      // Carry the per-tab rules too — a duplicate that forgets allow/deny
+      // re-blocks the sites this tab had allowed, and loses its zoom.
+      const copy = { ...newTab(t.ghost, t.originalMode), url: t.url, title: t.title, view: t.view, stack: [t.url], idx: 0, allow: t.allow, deny: t.deny, zoom: t.zoom };
       setTabs((ts) => [...ts.slice(0, i + 1), copy, ...ts.slice(i + 1)]);
       setActiveId(copy.id);
     },
@@ -873,6 +893,13 @@ export default function App() {
       const raw = tab.stack[idx];
       // Stack entries come from storage across restarts — re-validate the scheme every hop.
       const url = typeof raw === "string" && isSafeWebUrl(raw) ? raw : HOME;
+      // file:/view-source: stack entries only load in the live frame — relays can't fetch them.
+      if (url.startsWith("file://") || url.startsWith("view-source:")) {
+        patch(tab.id, (t) => ({ ...t, idx, url, view: "original", originalMode: "live", article: null, error: null, blocked: [], title: pageTitleFor(url), loading: false, stage: null, stageNote: "" }));
+        setInput(url);
+        abortTabFetch(tab.id);
+        return;
+      }
       const def = defaultNavMode();
       const handled = selfRenders(url);
       const view: ViewMode = url === HOME ? "start" : handled ? "reader" : tab.view === "start" ? def.view : tab.view;
@@ -903,6 +930,13 @@ export default function App() {
     (idx: number) => {
       if (!tab || idx < 0 || idx >= tab.stack.length || idx === tab.idx) return;
       const url = isSafeWebUrl(tab.stack[idx]) ? tab.stack[idx] : HOME;
+      // file:/view-source: stack entries only load in the live frame — relays can't fetch them.
+      if (url.startsWith("file://") || url.startsWith("view-source:")) {
+        patch(tab.id, (t) => ({ ...t, idx, url, view: "original", originalMode: "live", article: null, error: null, blocked: [], title: pageTitleFor(url), loading: false, stage: null, stageNote: "" }));
+        setInput(url);
+        abortTabFetch(tab.id);
+        return;
+      }
       const handled = selfRenders(url);
       const view: ViewMode = url === HOME ? "start" : handled ? "reader" : tab.view === "start" ? defaultNavMode().view : tab.view;
       const relay = url !== HOME && !handled && (view === "reader" || view === "split" || (view === "original" && tab.originalMode !== "live"));
@@ -1080,6 +1114,10 @@ export default function App() {
     const onDrop = (e: DragEvent) => {
       const dt = e.dataTransfer;
       if (!dt) return;
+      // Dropping selected text INTO an input is a paste-position gesture —
+      // navigating the tab away from under it would eat the user's edit.
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.("input, textarea, select, [contenteditable=true], [contenteditable='']")) return;
       const raw = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").trim().split(/\r?\n/)[0].trim();
       if (!raw) return;
       e.preventDefault();
@@ -1938,7 +1976,9 @@ export default function App() {
                 const nextAllow = [...new Set([...tab.allow, h])];
                 const nextDeny = tab.deny.filter((d) => d !== h);
                 patch(tab.id, (t) => ({ ...t, allow: nextAllow, deny: nextDeny, error: null, blocked: [], view: "reader" }));
-                go(tab.url, "reader", tab.id);
+                // Pass the new allow-list: go() would otherwise read the
+                // pre-patch tab and re-block on the first click.
+                go(tab.url, "reader", tab.id, undefined, undefined, nextAllow);
                 toast(`${h} added to this tab's allow-list`, "var(--lime)", "shield");
               }}
               onHome={() => go(HOME, "start")}

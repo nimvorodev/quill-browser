@@ -243,6 +243,10 @@ export function BookmarksPanel({
             )}
             <button
               onClick={() => {
+                // Clicking the pen on the row already being edited is a no-op —
+                // re-running setEditing here would revert the draft to the
+                // pre-commit title from this render.
+                if (editing?.url === b.url) return;
                 // Commit any in-flight edit first — switching rows unmounts
                 // the old input and would silently drop the draft.
                 commitRename();

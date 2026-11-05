@@ -88,7 +88,10 @@ export function isUrl(input: string): boolean {
   if (!s || s.startsWith("!")) return false;
   if (URLISH.test(s) || /^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(s)) return true;
   if (/\s/.test(s)) return false;
-  return /^[^\s]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(s);
+  // Bare LAN/router IPs have no TLD — still addresses, not searches.
+  if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(s)) return true;
+  // host?query with no path ("example.com?id=5") is a URL, not a search.
+  return /^[^\s]+\.[a-z]{2,}(:\d+)?([/?#]\S*)?$/i.test(s);
 }
 
 export function normalize(input: string, engine: SearchEngine): string {

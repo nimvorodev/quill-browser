@@ -247,6 +247,10 @@ export function blockCheck(
     }
   }
   for (const [re, cat] of PATHS) {
+    // PATHS regexes guard subresources. On the address you deliberately
+    // navigated to they false-positive (?ad=, /ads/ on real pages) — ads
+    // paths never block a navigation; domain-map ad hosts still do.
+    if (kind === "navigation" && cat === "ads") continue;
     if (re.test(rawUrl) && catEnabled(cat, opts)) return { cat, rule: re.source, url: rawUrl, kind };
   }
   return null;
@@ -310,20 +314,23 @@ export function unwrapRedirect(rawUrl: string, opts?: FilterOptions): string {
       break;
     }
     const host = u.hostname.toLowerCase();
+    // Exact-or-dot-suffix: bare endsWith let lookalike domains
+    // (notbing.com, myyoutube.com) hijack the redirect unwrapping.
+    const isHost = (h: string, base: string) => h === base || h.endsWith("." + base);
     let next: string | null = null;
-    if (host.endsWith("duckduckgo.com") && u.searchParams.get("uddg")) {
+    if (isHost(host, "duckduckgo.com") && u.searchParams.get("uddg")) {
       next = u.searchParams.get("uddg");
-    } else if (host.endsWith("bing.com") && u.pathname.startsWith("/ck/")) {
+    } else if (isHost(host, "bing.com") && u.pathname.startsWith("/ck/")) {
       next = decodeBingClick(u.searchParams.get("u")) || u.searchParams.get("url") || u.searchParams.get("q");
     } else if (/(^|\.)google\.[a-z.]+$/i.test(host) && (u.pathname === "/url" || u.pathname === "/imgres")) {
       next = u.searchParams.get("q") || u.searchParams.get("url") || u.searchParams.get("imgurl");
-    } else if (host.endsWith("startpage.com") && (u.searchParams.get("url") || u.searchParams.get("u"))) {
+    } else if (isHost(host, "startpage.com") && (u.searchParams.get("url") || u.searchParams.get("u"))) {
       next = u.searchParams.get("url") || u.searchParams.get("u");
-    } else if ((host.endsWith("ecosia.org") || host.endsWith("mojeek.com")) && u.searchParams.get("url")) {
+    } else if ((isHost(host, "ecosia.org") || isHost(host, "mojeek.com")) && u.searchParams.get("url")) {
       next = u.searchParams.get("url");
     } else if ((host === "l.facebook.com" || host === "lm.facebook.com" || host === "l.instagram.com") && u.searchParams.get("u")) {
       next = u.searchParams.get("u");
-    } else if (host.endsWith("youtube.com") && u.pathname === "/redirect") {
+    } else if (isHost(host, "youtube.com") && u.pathname === "/redirect") {
       next = u.searchParams.get("q");
     } else if (host === "out.reddit.com" && u.searchParams.get("url")) {
       next = u.searchParams.get("url");

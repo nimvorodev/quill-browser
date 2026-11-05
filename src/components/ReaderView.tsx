@@ -258,10 +258,14 @@ export function ReaderView({
   const [sel, setSel] = useState<{ text: string; x: number; y: number; below: boolean } | null>(null);
   // Page translation: the configured AI engine (offline Scribe or Ollama etc.)
   // translates the re-inked text; the original is one click back.
-  const [lang, setLang] = useState((navigator.language || "en").slice(0, 2));
+  const navLang = (navigator.language || "en").slice(0, 2);
+  const [lang, setLang] = useState(LANGS[navLang] ? navLang : "en");
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const transBuf = useRef("");
+  // Kills the in-flight stream when the page changes — without it the old
+  // translation keeps arriving into the new page's reader.
+  const transAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const el = scroller.current;
@@ -297,6 +301,7 @@ export function ReaderView({
 
   // Reset the translation when the page changes.
   useEffect(() => {
+    transAbort.current?.abort();
     setTranslation(null);
     setTranslating(false);
   }, [url]);
@@ -306,6 +311,9 @@ export function ReaderView({
     setTranslating(true);
     transBuf.current = "";
     setTranslation("");
+    transAbort.current?.abort();
+    const ac = new AbortController();
+    transAbort.current = ac;
     try {
       // ponytail: 24k-char cap — the offline Scribe's context is small; a
       // chunked/parallel translation can replace this when long pages matter.
@@ -318,14 +326,16 @@ export function ReaderView({
           },
         ],
         (tok) => {
+          if (ac.signal.aborted) return;
           transBuf.current += tok;
           setTranslation(transBuf.current);
         },
+        ac.signal,
       );
     } catch {
-      setTranslation((t) => t || "(translation failed — check the AI engine in the ask-AI panel)");
+      if (!ac.signal.aborted) setTranslation((t) => t || "(translation failed — check the AI engine in the ask-AI panel)");
     }
-    setTranslating(false);
+    if (!ac.signal.aborted) setTranslating(false);
   };
 
   const catCounts = useMemo(() => {

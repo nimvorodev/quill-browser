@@ -223,6 +223,9 @@ export function StartPage({
 
           {editing && (
             <ShelfEditor
+              // Keyed by tile: without it, switching tiles while the editor
+              // is open keeps the OLD tile's state (useState(tile) runs once).
+              key={editing.id}
               tile={editing}
               onCancel={() => setEditing(null)}
               onSave={saveTile}

@@ -100,9 +100,6 @@ export function TabStrip({
                 setOver(null);
               }}
               onClick={() => onSelect(t.id)}
-              onAuxClick={(e) => {
-                if (e.button === 1) onClose(t.id);
-              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY });

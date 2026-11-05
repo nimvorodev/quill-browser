@@ -177,8 +177,9 @@ async function trackDownload(item, dlUrl) {
   const push = () => sendAll("quill:download", { ...state });
   dlItems.set(state.id, { item, mark: (s) => { state.state = s; push(); } });
   push();
-  item.on("updated", () => {
+  item.on("updated", (_ev, s) => {
     state.received = item.getReceivedBytes();
+    if (s === "interrupted") state.state = "interrupted";
     push();
   });
   item.once("done", (_ev, s) => {
@@ -250,7 +251,7 @@ function installNetworkFilter() {
     // Never block the top-level document the user asked for — only subresources.
     if (details.resourceType !== "mainFrame" && (hostBlocked(host) || (blockEnabled && (YT_AD.test(details.url) || AD_PATHS.some((re) => re.test(details.url)))))) {
       blockedCount += 1;
-      win?.webContents.send("quill:blocked", { url: details.url, host });
+      sendAll("quill:blocked", { url: details.url, host });
       return cb({ cancel: true });
     }
     cb({});
@@ -263,12 +264,14 @@ function installNetworkFilter() {
   // Permission posture: a few safe things are auto-allowed, everything else
   // needs an explicit per-site grant — the renderer shows a prompt banner and
   // pushes the saved rules back here (it persists them in localStorage).
-  ses.setPermissionRequestHandler((wc, permission, cb) => {
+  ses.setPermissionRequestHandler((wc, permission, cb, details) => {
     if (PERM_AUTO.has(permission)) return cb(true);
     if (!PERM_PROMPTABLE.has(permission)) return cb(false);
     let host = "";
     try {
-      host = new URL(wc.getURL()).hostname;
+      // Attribute the request to the FRAME asking (a cross-origin iframe must
+      // not inherit the top-level page's grants).
+      host = new URL(details?.requestingUrl || wc.getURL()).hostname;
     } catch {
       /* about:blank — no host, deny */
     }
@@ -283,10 +286,11 @@ function installNetworkFilter() {
     pendingPerms.set(id, { cb, timer });
     w.webContents.send("quill:perm-request", { id, host, permission });
   });
-  ses.setPermissionCheckHandler((wc, permission) => {
+  ses.setPermissionCheckHandler((wc, permission, requestingOrigin, details) => {
     if (PERM_AUTO.has(permission)) return true;
     try {
-      const host = new URL(wc.getURL()).hostname;
+      const src = requestingOrigin || details?.requestingUrl || wc.getURL();
+      const host = new URL(src).hostname;
       return Boolean(host && permRules.get(host)?.has(permission));
     } catch {
       return false;
@@ -559,7 +563,9 @@ ipcMain.handle("quill:perm-respond", (_e, id, allow, always, host, permission) =
   if (!p) return false;
   clearTimeout(p.timer);
   pendingPerms.delete(String(id));
-  if (allow === true && always === true && typeof host === "string" && typeof permission === "string" && /^[a-z0-9.-]{1,253}$/i.test(host)) {
+  // Only promptable permission names may be persisted — anything else a
+  // renderer bug tried to plant is ignored.
+  if (allow === true && always === true && typeof host === "string" && typeof permission === "string" && PERM_PROMPTABLE.has(permission) && /^[a-z0-9.-]{1,253}$/i.test(host)) {
     const h = host.toLowerCase();
     const set = permRules.get(h) || new Set();
     set.add(permission);
@@ -611,6 +617,12 @@ ipcMain.handle("quill:clear-browsing-data", async () => {
   await ses.clearStorageData();
   await ses.clearCache();
   blockedCount = 0;
+  // The diagnostics log is download history too — "clear" must cover it.
+  try {
+    fs.writeFileSync(path.join(app.getPath("userData"), "downloads.log"), "");
+  } catch {
+    /* best-effort */
+  }
 });
 ipcMain.handle("quill:blocked-count", () => blockedCount);
 /** Screenshot of the whole app window (page + scribble overlay) as a PNG data URL. */

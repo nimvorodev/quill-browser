@@ -213,6 +213,7 @@ export function Toolbar({
             }}
             onPointerDown={(e) => {
               if (!b.dir || e.button !== 0) return;
+              if (holdTimer.current) window.clearTimeout(holdTimer.current);
               holdTimer.current = window.setTimeout(() => {
                 suppressClick.current = true;
                 setHistMenu(b.dir!);
@@ -222,7 +223,14 @@ export function Toolbar({
               if (holdTimer.current) window.clearTimeout(holdTimer.current);
             }}
             onPointerLeave={() => {
+              // Released off-button: no click will fire, so an armed
+              // suppressClick would swallow the NEXT click — disarm it.
               if (holdTimer.current) window.clearTimeout(holdTimer.current);
+              suppressClick.current = false;
+            }}
+            onPointerCancel={() => {
+              if (holdTimer.current) window.clearTimeout(holdTimer.current);
+              suppressClick.current = false;
             }}
             disabled={b.off}
             title={b.title}
