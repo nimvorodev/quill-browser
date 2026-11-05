@@ -50,6 +50,8 @@
   }
   .btn span { font-weight: 400; font-style: italic; font-size: 15px; }
   .trust { font-size: 14px; color: var(--ink3); margin: 12px 0 6px; letter-spacing: 0.05em; }
+  .diff { font-size: 17px; color: var(--ink2); margin: 18px 0 4px; }
+  .privacy { font-size: 14px; color: var(--ink3); margin: 30px 0 0; text-align: center; }
   .blurbs { display: grid; gap: 22px; margin: 44px 0; }
   .card {
     background: var(--paper2); border: 2px solid var(--ink);
@@ -64,7 +66,7 @@
 </head>
 <body>
 <div class="page">
-  <div class="topbar"><span>quill</span><a href="#reink">the reading</a><a href="#privacy">the shield</a><a href="#desks">the desks</a><a href="#tools">the tools</a></div>
+  <div class="topbar"><span>quill</span><a href="#reink">re-ink</a><a href="#write">the pen</a><a href="#desk">the desk</a><a href="#ai">the scribe</a></div>
 
   <h1>Quill<span class="dot">.</span></h1>
   <div class="tag">the hand-written private browser</div>
@@ -73,32 +75,38 @@
     A private browser that reads like a paper notebook. Re-ink any page, scribble on it, and nothing tracks you.
   </blockquote>
 
-  <a class="btn" href="#">download for windows <span>· free</span></a>
+  <p class="diff">
+    Every browser shows you the web. This one lets you read it, write on it, and keep what you find.
+  </p>
+
+  <a class="btn" href="#"><span>download for windows</span></a>
   <div class="trust">free, no account, no telemetry, works offline</div>
 
   <div class="blurbs">
 
     <div class="card" id="reink">
       <h3>re-ink anything.</h3>
-      <p>One tap turns any article into a paper page. Split it side-by-side with the real site, or go full notebook. The choice sticks per site, so your favorite reads always open as paper.</p>
+      <p>Turn any article into a paper page with one tap. Side-by-side with the real site or full notebook, and the choice sticks per site. No other browser rewrites the page like this.</p>
     </div>
 
-    <div class="card" id="privacy">
-      <h3>the web, minus the noise.</h3>
-      <p>Ads, trackers and social widgets are stripped before they load, at the network layer, not hidden with CSS. The ledger shows every request that died, and any site is one click from forgiven. Ghost tabs leave no history at all.</p>
+    <div class="card" id="write">
+      <h3>write on the web.</h3>
+      <p>Drag a marker over any page and keep the doodle as a PNG. Sticky notes float on top of the whole window. In the reader, highlight a passage and pin it as a note. You do not just move through pages, you leave marks on them.</p>
     </div>
 
-    <div class="card" id="desks">
-      <h3>a desk for everything.</h3>
-      <p>YouTube plays ad-free in its own desk while you keep browsing. GitHub repos render as clean paper. And an offline AI sits in the margin. It summarizes and translates any page with no setup and no network.</p>
+    <div class="card" id="desk">
+      <h3>the desk keeps playing.</h3>
+      <p>YouTube plays in its own desk, ad-free, and keeps going while you switch tabs. GitHub repos and Wikipedia read as paper. It is a browser built around reading, not tab-hopping.</p>
     </div>
 
-    <div class="card" id="tools">
-      <h3>tools that feel like paper.</h3>
-      <p>Scribble over any page with a marker and save it as a PNG. Pin sticky notes to your screen. Tear off ghost tabs that leave no history. Focus mode hides all the chrome until only the words are left.</p>
+    <div class="card" id="ai">
+      <h3>an AI in the margin, off the network.</h3>
+      <p>A Scribe sits in the margin and summarizes or translates any page. No account, no connection, none of it leaves your machine.</p>
     </div>
 
   </div>
+
+  <p class="privacy">Ads and trackers are also stripped at the network layer before they load, and ghost tabs leave no history at all.</p>
 
   <footer>
     Quill is free, and it stays that way. Your bookmarks, history and notes live on your machine, in the app, nowhere else.
