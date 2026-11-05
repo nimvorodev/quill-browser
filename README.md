@@ -19,7 +19,7 @@
 
 Quill is a desktop browser built around one idea: the web reads better on
 paper. Click **re-ink** on any article and it is rebuilt as clean, ruled-paper
-pages — no banners, pop-ups, autoplay, or sidebars. Split it beside the real
+pages, no banners, pop-ups, autoplay, or sidebars. Split it beside the real
 site or keep the quiet one; when you would rather stay on the live site, Quill
 remembers that for the site.
 
@@ -33,7 +33,7 @@ no cloud to sync to, and no telemetry.
 |  |  |
 | --- | --- |
 | ![Wikipedia's main page re-inked as a ruled-paper notebook page](docs/img/reinked.png) | ![Quill's start page with a shelf of sites, sticky notes and today's blocked count](docs/img/homepage.png) |
-| **re-ink** turns any article into paper — type, images, a table of contents and a tracker audit. | **the start page is a desk**, a shelf you arrange, a dog-eared read-later queue, sticky notes and today's blocked count. |
+| **re-ink** turns any article into paper, type, images, a table of contents and a tracker audit. | **the start page is a desk**, a shelf you arrange, a dog-eared read-later queue, sticky notes and today's blocked count. |
 | ![Hand-drawn marker annotations over the original Wikipedia page](docs/img/scribble.png) | ![A YouTube video playing in Quill's tube desk with an up-next list](docs/img/tubedesk.png) |
 | **write on the page** with the marker or highlighter, then save the doodle as a PNG. | **the tube desk**, YouTube with search, up next and a sleep timer, played through a privacy embed. |
 
