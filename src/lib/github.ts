@@ -94,7 +94,11 @@ async function api(path: string, signal?: AbortSignal): Promise<any> {
 const clean = (s: string) => (s || "").replace(/\s+/g, " ").trim();
 const shortNum = (n: number) =>
   n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
-const shortDate = (iso?: string) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+const shortDate = (iso?: string) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+};
 
 export interface Repo {
   full_name: string;
@@ -194,7 +198,7 @@ export interface FileEntry {
 }
 
 export async function repoFiles(owner: string, repo: string, path: string, signal?: AbortSignal): Promise<FileEntry[]> {
-  const p = path ? `/${encodeURI(path.split("/").join("/"))}` : "";
+  const p = path ? "/" + path.split("/").map(encodeURIComponent).join("/") : "";
   const j = await api(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents${p}`, signal);
   if (!Array.isArray(j)) return [];
   return j

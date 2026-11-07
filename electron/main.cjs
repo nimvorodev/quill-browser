@@ -12,6 +12,7 @@
 const { app, BrowserWindow, ipcMain, shell, session, nativeTheme, Menu, webContents, clipboard, nativeImage, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const { pathToFileURL } = require("node:url");
 
 const isMac = process.platform === "darwin";
 const isDev = !app.isPackaged && !!process.env.VITE_DEV_SERVER_URL;
@@ -77,7 +78,8 @@ function hostBlocked(hostname) {
 
 // ponytail: param-level YouTube ad heuristic — kills most pre/mid-rolls in the real
 // YouTube page. uBlock-grade blocking needs per-URL regex rules over googlevideo params.
-const YT_AD = /googlevideo\.com\/videoplayback\?[\s\S]*(?:[?&])(adformat|ad_type|adidx|ctier|oad)=|youtube\.com\/(?:api\/stats\/ads|pagead\/)/i;
+// The separator group is optional so a marker in FIRST position still matches.
+const YT_AD = /googlevideo\.com\/videoplayback\?(?:[\s\S]*?[?&])?(adformat|ad_type|adidx|ctier|oad)=|youtube\.com\/(?:api\/stats\/ads|pagead\/)/i;
 
 // ponytail: path-level rules for the LIVE network layer — deliberately a short,
 // ad-specific list. Generic patterns ("/ads/", "prebid") false-positive on real
@@ -204,16 +206,26 @@ async function trackDownload(item, dlUrl) {
   });
 }
 
+// ponytail: existsSync can't see files Electron creates only after the handler
+// returns — the claim Set closes that same-tick race; drop it if downloads
+// ever need cross-restart uniqueness.
+const claimedPaths = new Set();
+function uniqueSavePath(file) {
+  const dot = file.lastIndexOf(".");
+  const base = dot > 0 ? file.slice(0, dot) : file;
+  const ext = dot > 0 ? file.slice(dot) : "";
+  let p = path.join(app.getPath("downloads"), file);
+  for (let i = 1; fs.existsSync(p) || claimedPaths.has(p); i++) p = path.join(app.getPath("downloads"), `${base} (${i})${ext}`);
+  claimedPaths.add(p);
+  return p;
+}
+
 async function placeDownload(item, dlUrl) {
   try {
     // Auto mode: the filename is network-controlled — basename it so nothing
     // ever escapes the Downloads folder, whatever the server claims.
     const file = path.basename(item.getFilename() || "download");
-    const dot = file.lastIndexOf(".");
-    const base = dot > 0 ? file.slice(0, dot) : file;
-    const ext = dot > 0 ? file.slice(dot) : "";
-    let savePath = path.join(app.getPath("downloads"), file);
-    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${base} (${i})${ext}`);
+    let savePath = uniqueSavePath(file);
     // The dialog may have renamed the file — the drawer shows what's on disk.
     rememberDownload(savePath);
     const state = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, filename: path.basename(savePath), path: savePath, received: 0, total: item.getTotalBytes(), state: "downloading" };
@@ -228,6 +240,7 @@ async function placeDownload(item, dlUrl) {
     });
     item.once("done", (_ev, s) => {
       dlItems.delete(state.id);
+      claimedPaths.delete(savePath);
       state.received = item.getReceivedBytes();
       state.state = s === "completed" ? "completed" : s;
       push();
@@ -348,7 +361,7 @@ function createWindow(fresh = false) {
   });
 
   // The app window may only ever show the bundled app.
-  const appUrl = isDev ? process.env.VITE_DEV_SERVER_URL : `file://${path.join(__dirname, "..", "dist", "index.html")}`;
+  const appUrl = isDev ? process.env.VITE_DEV_SERVER_URL : pathToFileURL(path.join(__dirname, "..", "dist", "index.html")).href;
   w.webContents.on("will-navigate", (e, url) => {
     if (url !== appUrl && !url.startsWith(appUrl)) e.preventDefault();
   });
@@ -662,9 +675,12 @@ ipcMain.handle("quill:save-pdf", async (_e, wcId, name) => {
     if (!wc || wc.isDestroyed()) return false;
     const data = await wc.printToPDF({ printBackground: true });
     const safe = (String(name || "").replace(/[^\w\- .]+/g, "").trim().slice(0, 80)) || "page";
-    let savePath = path.join(app.getPath("downloads"), `${safe}.pdf`);
-    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${safe} (${i}).pdf`);
-    fs.writeFileSync(savePath, data);
+    const savePath = uniqueSavePath(`${safe}.pdf`);
+    try {
+      fs.writeFileSync(savePath, data);
+    } finally {
+      claimedPaths.delete(savePath);
+    }
     rememberDownload(savePath);
     // Reuse the downloads drawer: it lands there as a finished download.
     sendAll("quill:download", { id: `pdf-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: data.length, total: data.length, state: "completed" });
@@ -679,9 +695,12 @@ ipcMain.handle("quill:save-html", async (_e, html, name) => {
   try {
     if (typeof html !== "string" || !html.trim()) return false;
     const safe = (String(name || "").replace(/[^\w\- .]+/g, "").trim().slice(0, 80)) || "page";
-    let savePath = path.join(app.getPath("downloads"), `${safe}.html`);
-    for (let i = 1; fs.existsSync(savePath); i++) savePath = path.join(app.getPath("downloads"), `${safe} (${i}).html`);
-    fs.writeFileSync(savePath, html, "utf8");
+    const savePath = uniqueSavePath(`${safe}.html`);
+    try {
+      fs.writeFileSync(savePath, html, "utf8");
+    } finally {
+      claimedPaths.delete(savePath);
+    }
     rememberDownload(savePath);
     sendAll("quill:download", { id: `html-${Date.now()}`, filename: path.basename(savePath), path: savePath, received: Buffer.byteLength(html), total: Buffer.byteLength(html), state: "completed" });
     return true;

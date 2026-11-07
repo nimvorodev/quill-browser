@@ -19,7 +19,6 @@ export interface DownloadItem {
 
 export interface DesktopBridge {
   platform: "win32" | "darwin" | "linux";
-  version: string;
   /** Window controls (frameless on Windows / Linux; macOS uses native traffic lights). */
   minimize(): void;
   maximize(): void;

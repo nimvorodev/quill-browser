@@ -113,7 +113,11 @@ export function Scribble({
   }, [tool, color, size, editing]);
 
   useEffect(() => () => {
-    window.clearTimeout(saveTimer.current);
+    // Flush the debounced save on unmount or the last strokes are lost.
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveInk(pendingKey.current, { strokes: strokes.current, texts: texts.current });
+    }
   }, []);
 
   const resize = () => {

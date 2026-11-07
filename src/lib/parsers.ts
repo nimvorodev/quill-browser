@@ -20,7 +20,7 @@ export interface VideoHit {
 /** Only the first few hundred characters are checked, so a result that merely mentions "forbidden" still passes. */
 const WALL_HEAD = /verifying your request|just a moment\.\.\.|cf-browser-verification|captcha|anomaly-modal|target url returned error (?:4|5)\d\d|too many requests|enable javascript and cookies|bots use duckduckgo|complete the following challenge|unusual traffic/i;
 
-const WRAPPER = /(^|\.)(duckduckgo\.com|search\.brave\.com|startpage\.com|mojeek\.com|ecosia\.org|bing\.com|google\.[a-z.]+|yahoo\.com|qwant\.com|mwmbl\.org)$/i;
+const WRAPPER = /(^|\.)(duckduckgo\.com|search\.brave\.com|startpage\.com|mojeek\.com|ecosia\.org|bing\.com|google\.[a-z]{2,3}(\.[a-z]{2})?|yahoo\.com|qwant\.com|mwmbl\.org)$/i;
 
 export function acceptHit(url: string): boolean {
   let host = "";

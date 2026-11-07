@@ -882,7 +882,7 @@ export default function App() {
         cullTabs((x) => x.id === id || hostOf(x.url) !== host, id);
       }
     },
-    [tabs, reloadTab, duplicateTab, patch, closeTab],
+    [tabs, reloadTab, duplicateTab, patch, closeTab, activeId],
   );
 
   const travel = useCallback(
@@ -902,27 +902,36 @@ export default function App() {
       }
       const def = defaultNavMode();
       const handled = selfRenders(url);
+      // Back/forward must respect blocks too — otherwise the stack reloads a
+      // deny-listed host straight through the relays (navigate() already gates this).
+      const hit = blockCheck(url, filtersFor(tab.allow, tab.deny), "navigation");
       const view: ViewMode = url === HOME ? "start" : handled ? "reader" : tab.view === "start" ? def.view : tab.view;
-      const relay = url !== HOME && !handled && (view === "reader" || view === "split" || (view === "original" && tab.originalMode !== "live"));
+      const relay = !hit && url !== HOME && !handled && (view === "reader" || view === "split" || (view === "original" && tab.originalMode !== "live"));
       const title = url === HOME ? "New page" : pageTitleFor(url);
       patch(tab.id, (t) => ({
         ...t,
         idx,
         url,
-        view,
+        view: hit ? "reader" : view,
         article: null,
-        error: null,
-        blocked: [],
+        error: hit ? `BLOCKED:${hit.rule}` : null,
+        blocked: hit ? [hit] : [],
         title,
         loading: relay,
         stage: relay ? "fetching" : null,
         stageNote: "",
       }));
       setInput(url === HOME ? "" : url);
+      if (hit) {
+        abortTabFetch(tab.id);
+        addBlocked([hit]);
+        toast(`blocked ${hostOf(url)} before it loaded`, "var(--red)", "shield");
+        return;
+      }
       if (relay) loadReader(tab.id, url, title, tab.ghost, filtersFor(tab.allow, tab.deny));
       else abortTabFetch(tab.id);
     },
-    [tab, defaultNavMode, patch, loadReader, filtersFor, abortTabFetch],
+    [tab, defaultNavMode, patch, loadReader, filtersFor, abortTabFetch, addBlocked, toast],
   );
 
   /** Jump straight to a stack index — the back/forward dropdown. */
@@ -938,15 +947,23 @@ export default function App() {
         return;
       }
       const handled = selfRenders(url);
+      // Same block gate as travel(): a deny-listed stack entry must interstitial, not load.
+      const hit = blockCheck(url, filtersFor(tab.allow, tab.deny), "navigation");
       const view: ViewMode = url === HOME ? "start" : handled ? "reader" : tab.view === "start" ? defaultNavMode().view : tab.view;
-      const relay = url !== HOME && !handled && (view === "reader" || view === "split" || (view === "original" && tab.originalMode !== "live"));
+      const relay = !hit && url !== HOME && !handled && (view === "reader" || view === "split" || (view === "original" && tab.originalMode !== "live"));
       const title = url === HOME ? "New page" : pageTitleFor(url);
-      patch(tab.id, (t) => ({ ...t, idx, url, view, article: null, error: null, blocked: [], title, loading: relay, stage: relay ? "fetching" : null, stageNote: "" }));
+      patch(tab.id, (t) => ({ ...t, idx, url, view: hit ? "reader" : view, article: null, error: hit ? `BLOCKED:${hit.rule}` : null, blocked: hit ? [hit] : [], title, loading: relay, stage: relay ? "fetching" : null, stageNote: "" }));
       setInput(url === HOME ? "" : url);
+      if (hit) {
+        abortTabFetch(tab.id);
+        addBlocked([hit]);
+        toast(`blocked ${hostOf(url)} before it loaded`, "var(--red)", "shield");
+        return;
+      }
       if (relay) loadReader(tab.id, url, title, tab.ghost, filtersFor(tab.allow, tab.deny));
       else abortTabFetch(tab.id);
     },
-    [tab, defaultNavMode, patch, loadReader, filtersFor, abortTabFetch],
+    [tab, defaultNavMode, patch, loadReader, filtersFor, abortTabFetch, addBlocked, toast],
   );
 
   /** A click inside a webview/iframe navigated the page itself — the back/forward stack and history must grow with it. */
@@ -1020,7 +1037,7 @@ export default function App() {
         });
       }
     },
-    [tab, patch, setSiteViews, toast],
+    [tab, patch, setSiteViews, toast, siteViews],
   );
 
   const toggleBookmark = useCallback(() => {
@@ -1175,15 +1192,15 @@ export default function App() {
   /* ---------------- read-later queue ---------------- */
   const toggleLater = useCallback(() => {
     if (!tab || tab.url === HOME) return toast("nothing to queue here", "var(--orange)", "clock");
-    setLater((q) => {
-      if (q.some((x) => x.url === tab.url)) {
-        toast("dropped from the queue", "var(--paper-3)", "clock");
-        return q.filter((x) => x.url !== tab.url);
-      }
-      toast("saved to read later", "var(--cyan)", "clock");
-      return [{ url: tab.url, title: tab.title || hostOf(tab.url), at: Date.now() }, ...q];
-    });
-  }, [tab, setLater, toast]);
+    // Toast outside the updater — StrictMode double-invokes updaters, stacking duplicate toasts.
+    const queued = later.some((x) => x.url === tab.url);
+    setLater((q) =>
+      q.some((x) => x.url === tab.url)
+        ? q.filter((x) => x.url !== tab.url)
+        : [{ url: tab.url, title: tab.title || hostOf(tab.url), at: Date.now() }, ...q],
+    );
+    toast(queued ? "dropped from the queue" : "saved to read later", queued ? "var(--paper-3)" : "var(--cyan)", "clock");
+  }, [tab, later, setLater, toast]);
   const readNext = useCallback(() => {
     const next = later.length ? later[later.length - 1] : null;
     if (!next) return toast("the queue is empty", "var(--orange)", "clock");
@@ -1462,7 +1479,7 @@ export default function App() {
     // ponytail: ceiling — secondary-window tabs aren't persisted; merge
     // sessions per window only if that ever matters.
     if (location.hash.includes("fresh")) return;
-    const t = window.setTimeout(() => {
+    const save = () => {
       try {
         const keep = tabs.filter((x) => !x.ghost);
         const active = Math.max(0, keep.findIndex((x) => x.id === activeId));
@@ -1485,8 +1502,19 @@ export default function App() {
       } catch {
         /* storage full */
       }
-    }, 1000);
-    return () => window.clearTimeout(t);
+    };
+    const t = window.setTimeout(save, 1000);
+    // Quitting inside the 1s debounce window would silently drop the last
+    // session change — pagehide flushes it synchronously.
+    const onHide = () => {
+      window.clearTimeout(t);
+      save();
+    };
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pagehide", onHide);
+    };
   }, [tabs, activeId, settings.restoreSession]);
 
   /* ---------------- command palette ---------------- */

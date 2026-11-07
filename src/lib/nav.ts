@@ -143,7 +143,7 @@ export function isSearchSiteUrl(raw: string): boolean {
   if (host === "startpage.com") return serp("/sp/search");
   if (host === "mojeek.com") return serp("/search", "/images");
   if (host === "ecosia.org") return serp("/search", "/images");
-  if (/(^|\.)google\.[a-z.]+$/.test(host)) return serp("/search", "/images");
+  if (/(^|\.)google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(host)) return serp("/search", "/images");
   return false;
 }
 

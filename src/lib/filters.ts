@@ -322,7 +322,7 @@ export function unwrapRedirect(rawUrl: string, opts?: FilterOptions): string {
       next = u.searchParams.get("uddg");
     } else if (isHost(host, "bing.com") && u.pathname.startsWith("/ck/")) {
       next = decodeBingClick(u.searchParams.get("u")) || u.searchParams.get("url") || u.searchParams.get("q");
-    } else if (/(^|\.)google\.[a-z.]+$/i.test(host) && (u.pathname === "/url" || u.pathname === "/imgres")) {
+    } else if (/(^|\.)google\.[a-z]{2,3}(\.[a-z]{2})?$/i.test(host) && (u.pathname === "/url" || u.pathname === "/imgres")) {
       next = u.searchParams.get("q") || u.searchParams.get("url") || u.searchParams.get("imgurl");
     } else if (isHost(host, "startpage.com") && (u.searchParams.get("url") || u.searchParams.get("u"))) {
       next = u.searchParams.get("url") || u.searchParams.get("u");

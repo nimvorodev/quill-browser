@@ -15,14 +15,15 @@ export interface VideoRef {
   t?: number;
 }
 
-/** YouTube timestamp formats: "90s", "1m30s", or plain "90". */
+/** YouTube timestamp formats: "90s", "1m30s", "1h2m3s", or plain "90". */
 function parseT(raw: string | null): number | undefined {
   if (!raw) return undefined;
-  const m = raw.match(/^(?:(\d+)m)?(\d*)s?$/);
+  const m = raw.match(/^(?:(\d+)h)?(?:(\d+)m)?(\d*)s?$/);
   if (!m) return undefined;
-  const min = m[1] ? parseInt(m[1], 10) : 0;
-  const sec = m[2] ? parseInt(m[2], 10) : 0;
-  const t = min * 60 + sec;
+  const hr = m[1] ? parseInt(m[1], 10) : 0;
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  const sec = m[3] ? parseInt(m[3], 10) : 0;
+  const t = hr * 3600 + min * 60 + sec;
   return t > 0 ? t : undefined;
 }
 

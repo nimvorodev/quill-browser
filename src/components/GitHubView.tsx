@@ -292,7 +292,7 @@ function FileViewer({
   }, [owner, repo, branch, path]);
 
   const lines = text == null ? [] : text.split("\n");
-  const binary = text != null && text.slice(0, 8000).includes("");
+  const binary = text != null && text.slice(0, 8000).includes("\u0000");
 
   return (
     <div className="min-w-0 overflow-hidden rounded-[16px] border-2 border-ink bg-paper2">
@@ -602,6 +602,7 @@ function RepoPage({
     setFiles(null);
     setErr("");
     setViewFile(null);
+    setTab(path ? "files" : "readme");
     // Repo info first: the real default branch makes README links and raw files resolve.
     repoInfo(owner, repo, ac.signal)
       .then((i) => {

@@ -236,14 +236,14 @@ export function AIPanel({
   }, [requestedTab]);
 
   useEffect(() => {
-    if (queued && open) {
+    if (queued && open && !busy) {
       setTab("chat");
       const override = queued.ctxOverride !== undefined ? queued.ctxOverride : page && includeCtx ? undefined : "";
       send(queued.text, override);
       consumeQueued();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queued, open]);
+  }, [queued, open, busy]);
 
   const provider = providerOf(cfg.provider);
 
@@ -284,7 +284,11 @@ export function AIPanel({
           ))}
           {messages.length > 0 && tab === "chat" && (
             <button
-              onClick={() => setMessages([])}
+              onClick={() => {
+                // Abort any in-flight stream or its token callback resurrects the erased chat.
+                abort.current?.abort();
+                setMessages([]);
+              }}
               className="hd-soft ml-auto px-2.5 py-[2px] text-[14px] text-ink2 hover:bg-red/20 hover:text-red"
               title="Erase this conversation"
             >

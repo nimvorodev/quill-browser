@@ -15,7 +15,6 @@ function on(channel, map) {
 
 contextBridge.exposeInMainWorld("quill", {
   platform: process.platform,
-  version: process.env.npm_package_version || "",
   partition: "persist:quill-web",
 
   minimize: () => ipcRenderer.send("quill:win", "minimize"),

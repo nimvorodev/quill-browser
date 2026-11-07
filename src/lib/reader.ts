@@ -480,7 +480,7 @@ function normalizeDomAssets(doc: Document, baseUrl: string) {
     const v = el.getAttribute(attr);
     if (!v) return;
     const trimmed = v.trim();
-    if (!trimmed || trimmed.startsWith("data:") || trimmed.startsWith("#") || trimmed.startsWith("javascript:") || trimmed.startsWith("mailto:")) return;
+    if (!trimmed || /^(data|#|javascript:|mailto:)/i.test(trimmed)) return;
     try {
       if (trimmed.startsWith("//")) {
         el.setAttribute(attr, `${baseProto}${trimmed}`);
@@ -543,12 +543,15 @@ function serializeForSrcDoc(doc: Document, baseUrl: string, unlockScroll: boolea
   base.setAttribute("target", "_blank");
   head.prepend(base);
 
-  const htmlStr = "<!doctype html>\n" + (clone.documentElement?.outerHTML || "");
   const extras = (unlockScroll ? UNLOCK_SCROLL_STYLE : "") + BRIDGE_SCRIPT + FRAME_SCRIPT;
-  if (/<\/body>/i.test(htmlStr)) {
-    return htmlStr.replace(/<\/body>/i, `${extras}</body>`);
+  // Inject via the DOM, never string-replace: a "</body>" inside an attribute
+  // value or comment would otherwise swallow the bridge scripts.
+  if (clone.body) {
+    const extraDoc = new DOMParser().parseFromString(extras, "text/html");
+    for (const el of [...extraDoc.head.children, ...extraDoc.body.children]) clone.body.appendChild(el);
+    return "<!doctype html>\n" + (clone.documentElement?.outerHTML || "");
   }
-  return htmlStr + extras;
+  return "<!doctype html>\n" + (clone.documentElement?.outerHTML || "") + extras;
 }
 
 /* ------------------------------------------------------------------ */
@@ -631,7 +634,7 @@ function stripTrackersFromDom(
   cleanDoc.querySelectorAll("iframe, embed, object").forEach((fr) => {
     const src = fr.getAttribute("src") || fr.getAttribute("data") || "";
     scanned++;
-    if (!src || src === "about:blank" || src.startsWith("javascript:")) {
+    if (!src || src === "about:blank" || /^javascript:/i.test(src)) {
       if (opts?.shields !== false) fr.remove();
       return;
     }
@@ -713,6 +716,14 @@ function stripTrackersFromDom(
       if (hit) pushBlock(hit);
     }
   }
+
+  // 7. Strip event-handler attributes — the srcDoc frame allows scripts, so a
+  // surviving onerror= would run page JS in the "zero page JS" document.
+  cleanDoc.querySelectorAll("*").forEach((el) => {
+    for (const a of Array.from(el.attributes)) {
+      if (a.name.toLowerCase().startsWith("on")) el.removeAttribute(a.name);
+    }
+  });
 
   void url;
   return { cleanDoc, blocked, scanned };
