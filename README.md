@@ -98,10 +98,10 @@ Windows may show *"Windows protected your PC"* on first run. Choose **More
 info → Run anyway**, or verify the download first:
 
 <details>
-<summary>SHA-256 for Quill-Setup-1.0.0.exe</summary>
+<summary>SHA-256 for Quill-Setup-1.0.1.exe</summary>
 
 ```text
-0ff17f33876f7cc41c71cd86dc258779bd3e2e5c1683a8a47f0666ed625e4883  Quill-Setup-1.0.0.exe
+ea56c034c000b6785ae82292625ad0e54b50e64c322e6d5d8d786c74486a2172  Quill-Setup-1.0.1.exe
 ```
 
 </details>
@@ -167,8 +167,8 @@ release/             packaging output (gitignored)
 
 ## Status
 
-[1.0.0](https://github.com/nimvorodev/quill-browser/releases/tag/v1.0.0) is the
-first public release and works as a daily browser on Windows. Known gaps:
+[1.0.1](https://github.com/nimvorodev/quill-browser/releases/tag/v1.0.1) is the
+current release and works as a daily browser on Windows. Known gaps:
 
 - No auto-update. The start page has a manual **check for updates**, then you
   install the new build yourself.
