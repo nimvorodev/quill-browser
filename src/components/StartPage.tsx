@@ -188,7 +188,7 @@ export function StartPage({
             <button
               onClick={onPalette}
               className="hd btn-sketch hidden items-center gap-2 bg-paper2 px-3 py-2 text-[15px] text-ink sm:flex"
-              title="Command palette"
+              title="Command bar"
             >
               <Icon name="zap" size={16} /> press <kbd className="rounded border border-ink/50 px-1">⌘K</kbd> for anything
             </button>

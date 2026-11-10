@@ -510,7 +510,7 @@ export function SettingsPanel({
 
 /* ---------------- shortcuts ---------------- */
 const KEYS: [string, string][] = [
-  ["Ctrl/⌘ + K", "command palette"],
+  ["Ctrl/⌘ + K", "command bar"],
   ["Ctrl/⌘ + T", "new tab"],
   ["Ctrl/⌘ + W", "close tab"],
   ["Ctrl/⌘ + L", "jump to the address bar"],

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon, Logo } from "./components/Icons";
 import { TabStrip } from "./components/TabStrip";
-import { Toolbar, BookmarkBar } from "./components/Toolbar";
+import { Toolbar, BookmarkBar, type Command } from "./components/Toolbar";
 import { StartPage } from "./components/StartPage";
 import { LiveView } from "./components/LiveView";
 import { ReaderView } from "./components/ReaderView";
 import { AIPanel } from "./components/AIPanel";
 import { PrivacyPanel } from "./components/PrivacyPanel";
-import { CommandPalette, type Command } from "./components/CommandPalette";
 import { Scribble } from "./components/Scribble";
 import { Drawer, HistoryPanel, BookmarksPanel, DownloadsPanel, NotesPanel, SettingsPanel, ShortcutsPanel } from "./components/Panels";
 import { StatusBar } from "./components/StatusBar";
@@ -276,7 +275,6 @@ export default function App() {
   const [aiQueued, setAiQueued] = useState<{ text: string; ctxOverride?: string; at: number } | null>(null);
   const [aiResetNonce, setAiResetNonce] = useState(0);
   const [aiReqTab, setAiReqTab] = useState<{ tab: "chat" | "setup"; at: number } | null>(null);
-  const [palette, setPalette] = useState(false);
   const [scribble, setScribble] = useState(false);
   const [focus, setFocus] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -1277,7 +1275,7 @@ export default function App() {
     if (cmd === "new-tab") openNew();
     else if (cmd === "close-tab" && tab) closeTab(tab.id);
     else if (cmd === "reload") reload();
-    else if (cmd === "palette") setPalette((p) => !p);
+    else if (cmd === "palette") window.dispatchEvent(new Event("quill:focus-bar"));
     else if (cmd === "find") setFindOpen(true);
     else if (cmd === "save-pdf") void savePdf();
     // Menu-driven browser conventions (accelerators work even inside webviews).
@@ -1360,7 +1358,7 @@ export default function App() {
       // the outermost open thing (find bar, scribble, drawers, palette first)
       // and nothing is being typed into (Esc in the address bar reverts that).
       const t = e.target as HTMLElement | null;
-      if (e.key === "Escape" && focus && !drawer && !scribble && !findOpen && !palette && !/input|textarea|select/i.test(t?.tagName || "")) {
+      if (e.key === "Escape" && focus && !drawer && !scribble && !findOpen && !/input|textarea|select/i.test(t?.tagName || "")) {
         e.preventDefault();
         setFocus(false);
         return;
@@ -1382,7 +1380,7 @@ export default function App() {
     const k = e.key.toLowerCase();
     if (k === "k") {
       e.preventDefault();
-      setPalette((p) => !p);
+      window.dispatchEvent(new Event("quill:focus-bar"));
     } else if (k === "f" && !desktop) {
       // Web build: no native menu, so the renderer handles it here.
       e.preventDefault();
@@ -1517,7 +1515,7 @@ export default function App() {
     };
   }, [tabs, activeId, settings.restoreSession]);
 
-  /* ---------------- command palette ---------------- */
+  /* ---------------- command bar (address bar dropdown) ---------------- */
   const commands = useMemo<Command[]>(() => {
     const list: Command[] = [
       { id: "new", label: "New tab", section: "tabs", icon: "plus", hint: "Ctrl/⌘+T", run: () => openNew() },
@@ -1898,7 +1896,6 @@ export default function App() {
             onShields={() => setDrawer("privacy")}
             aiOpen={aiOpen}
             onAI={() => setAiOpen((a) => !a)}
-            onPalette={() => setPalette(true)}
             onPanel={(p) => setDrawer(p)}
             onScribble={() => setScribble((s) => !s)}
             zoom={tab.zoom}
@@ -1908,6 +1905,7 @@ export default function App() {
             shelf={SHELF}
             queued={later.some((x) => x.url === tab.url)}
             onReadLater={toggleLater}
+            commands={commands}
           />
         )}
 
@@ -2007,7 +2005,7 @@ export default function App() {
               engine={engine}
               onEngine={(e) => setSettings((s) => ({ ...s, engine: e.id }))}
               onAsk={(p) => askAI(p)}
-              onPalette={() => setPalette(true)}
+              onPalette={() => window.dispatchEvent(new Event("quill:focus-bar"))}
               later={later}
               onRemoveLater={(url) => setLater((q) => q.filter((x) => x.url !== url))}
               onReadNext={readNext}
@@ -2385,7 +2383,6 @@ export default function App() {
         <ShortcutsPanel />
       </Drawer>
 
-      <CommandPalette open={palette} onClose={() => setPalette(false)} commands={commands} />
       <Scribble open={scribble} onClose={() => setScribble(false)} dark={settings.theme === "night"} pageKey={inkKey(tab?.url, HOME)} probeScroll={probeScroll} />
 
       {/* ---------- first run ---------- */}
@@ -2394,7 +2391,7 @@ export default function App() {
           onClose={() => setSeenIntro(true)}
           onTour={() => {
             setSeenIntro(true);
-            setPalette(true);
+            window.dispatchEvent(new Event("quill:focus-bar"));
           }}
           onRead={() => {
             setSeenIntro(true);
@@ -2487,7 +2484,7 @@ function Welcome({ onClose, onTour, onRead }: { onClose: () => void; onTour: () 
             <Icon name="scissors" size={16} /> show me — re-ink an article
           </button>
           <button onClick={onTour} className="hd btn-sketch flex items-center gap-1.5 bg-cyan px-4 py-1.5 text-[18px] text-[#12171f]">
-            <Icon name="zap" size={16} /> open the palette
+            <Icon name="zap" size={16} /> open the command bar
           </button>
           <button onClick={onClose} className="hd-soft btn-sketch ml-auto px-3 py-1.5 text-[16px] text-ink2 hover:bg-paper3/60">
             just let me browse

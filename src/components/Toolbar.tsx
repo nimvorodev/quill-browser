@@ -6,7 +6,31 @@ import { parseGitHub } from "../lib/github";
 import { EnginePicker } from "./EnginePicker";
 import type { Bookmark, HistoryEntry, OriginalSubMode, Tab, ViewMode } from "../lib/store";
 
-type Sug = { kind: "history" | "bookmark" | "shelf" | "search" | "url"; title: string; url: string; sub?: string };
+/** A runnable command shown in the address bar dropdown (Arc-style command bar). */
+export type Command = { id: string; label: string; section: string; icon: string; hint?: string; keywords?: string; run: () => void };
+
+/** Fuzzy score: higher = better match, -1 = no match. Kept from the old ⌘K palette. */
+export function score(q: string, s: string) {
+  if (!q) return 1;
+  const hay = s.toLowerCase();
+  const needle = q.toLowerCase();
+  if (hay.startsWith(needle)) return 100;
+  const idx = hay.indexOf(needle);
+  if (idx >= 0) return 80 - idx * 0.4;
+  let hi = 0;
+  let sc = 0;
+  let streak = 0;
+  for (const ch of needle) {
+    const found = hay.indexOf(ch, hi);
+    if (found < 0) return -1;
+    streak = found === hi ? streak + 1 : 0;
+    sc += 2 + streak;
+    hi = found + 1;
+  }
+  return sc;
+}
+
+type Sug = { kind: "history" | "bookmark" | "shelf" | "search" | "url" | "cmd"; title: string; url: string; sub?: string; cmd?: Command };
 
 export function Toolbar({
   tab,
@@ -29,7 +53,6 @@ export function Toolbar({
   onShields,
   aiOpen,
   onAI,
-  onPalette,
   onPanel,
   onScribble,
   zoom,
@@ -39,6 +62,7 @@ export function Toolbar({
   shelf,
   queued,
   onReadLater,
+  commands,
 }: {
   tab: Tab;
   input: string;
@@ -61,7 +85,6 @@ export function Toolbar({
   onShields: () => void;
   aiOpen: boolean;
   onAI: () => void;
-  onPalette: () => void;
   onPanel: (p: string) => void;
   onScribble: () => void;
   zoom: number;
@@ -71,6 +94,8 @@ export function Toolbar({
   shelf: { name: string; url: string; blurb: string }[];
   queued: boolean;
   onReadLater: () => void;
+  /** Commands offered in the address bar dropdown (the command bar). */
+  commands: Command[];
 }) {
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
@@ -174,11 +199,34 @@ export function Toolbar({
     return out.slice(0, 10);
   }, [input, bookmarks, history, shelf, engine]);
 
+  // Command bar: matching commands (fuzzy, same scoring the old ⌘K palette
+  // used) lead the dropdown, then the usual URL suggestions follow.
+  const cmds = useMemo(() => {
+    const q = input.trim().toLowerCase();
+    if (!q || q.startsWith("!") || isUrl(q)) return [];
+    return commands
+      .map((c) => ({ c, s: Math.max(score(q, c.label), score(q, c.keywords || ""), score(q, c.section) - 6) }))
+      .filter((x) => x.s >= 40)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 3)
+      .map((x) => x.c);
+  }, [input, commands]);
+
+  const items: Sug[] = [
+    ...cmds.map((c) => ({ kind: "cmd" as const, title: c.label, url: "", sub: c.hint ? `${c.section} · ${c.hint}` : c.section, cmd: c })),
+    ...sugs,
+  ];
+
   const pick = (s?: Sug) => {
     if (!s) return;
-    setInput(s.url);
     setOpen(false);
+    setHi(-1);
     inputRef.current?.blur();
+    if (s.kind === "cmd" && s.cmd) {
+      s.cmd.run();
+      return;
+    }
+    setInput(s.url);
     onSubmit(undefined, s.url);
   };
 
@@ -321,13 +369,13 @@ export function Toolbar({
               }
               if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setHi((h) => Math.min(h + 1, sugs.length - 1));
+                setHi((h) => Math.min(h + 1, items.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setHi((h) => Math.max(h - 1, -1));
               } else if (e.key === "Enter") {
                 e.preventDefault();
-                if (open && hi >= 0 && sugs[hi]) pick(sugs[hi]);
+                if (open && hi >= 0 && items[hi]) pick(items[hi]);
                 else {
                   setOpen(false);
                   inputRef.current?.blur();
@@ -405,9 +453,9 @@ export function Toolbar({
           </button>
         </div>
 
-        {open && sugs.length > 0 && (
+        {open && items.length > 0 && (
           <div className="pop-in absolute left-0 right-0 top-[44px] z-50 border-2 border-ink bg-paper2 text-ink ink-shadow-lg">
-            {sugs.map((s, i) => (
+            {items.map((s, i) => (
               <button
                 key={s.url + i}
                 onMouseEnter={() => setHi(i)}
@@ -420,10 +468,12 @@ export function Toolbar({
                   i === hi ? "bg-yellow/40" : "hover:bg-paper3/60",
                 ].join(" ")}
               >
-                <span className="text-ink2">
+                <span className={s.kind === "cmd" ? "text-pink" : "text-ink2"}>
                   <Icon
                     name={
-                      s.kind === "bookmark"
+                      s.kind === "cmd"
+                        ? s.cmd?.icon || "zap"
+                        : s.kind === "bookmark"
                         ? "star"
                         : s.kind === "history"
                           ? "history"
@@ -496,8 +546,8 @@ export function Toolbar({
           <span className="hidden text-[15px] lg:inline">ask AI</span>
         </button>
         <button
-          onClick={onPalette}
-          title="Command palette (Ctrl/Cmd+K)"
+          onClick={() => window.dispatchEvent(new Event("quill:focus-bar"))}
+          title="Command bar (Ctrl/Cmd+K)"
           className="btn-sketch hd hidden h-[34px] w-[34px] shrink-0 items-center justify-center bg-paper2 text-ink2 hover:bg-yellow hover:text-ink sm:flex"
         >
           <Icon name="zap" size={16} />

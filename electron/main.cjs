@@ -539,7 +539,7 @@ function buildMenu() {
       submenu: [
         { label: "Reload Page", accelerator: "CmdOrCtrl+R", click: cmd("reload") },
         { label: "View Page Source", accelerator: "CmdOrCtrl+U", click: cmd("view-source") },
-        { label: "Command Palette", accelerator: "CmdOrCtrl+K", click: cmd("palette") },
+        { label: "Command Bar", accelerator: "CmdOrCtrl+K", click: cmd("palette") },
         { type: "separator" },
         { role: "togglefullscreen" },
         ...(isDev ? [{ type: "separator" }, { role: "toggleDevTools" }] : []),
