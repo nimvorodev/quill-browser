@@ -1824,37 +1824,54 @@ export default function App() {
 
   const renderOriginalPane = (compact = false) => (tab ? renderLivePane(tab, compact) : null);
 
+  const side = settings.tabsLayout === "side";
+  const tabStrip = (
+    <TabStrip
+      tabs={tabs}
+      activeId={tab?.id || ""}
+      onSelect={setActiveId}
+      onClose={closeTab}
+      onNew={() => openNew()}
+      onPin={(id) => patch(id, (t) => ({ ...t, pinned: !t.pinned }))}
+      onMute={(id) => patch(id, (t) => ({ ...t, muted: !t.muted }))}
+      onMenuAction={onTabMenu}
+      popupHosts={popupHosts}
+      onReorder={(from, to) =>
+        setTabs((ts) => {
+          const next = [...ts];
+          const [m] = next.splice(from, 1);
+          next.splice(to, 0, m);
+          return next;
+        })
+      }
+      onTheme={() => setSettings((s) => ({ ...s, theme: s.theme === "night" ? "day" : "night" }))}
+      theme={settings.theme}
+      onFocusMode={() => setFocus(true)}
+      layout={settings.tabsLayout}
+    />
+  );
+
   return (
-    <div className="paper-bg grain relative flex h-full flex-col overflow-hidden">
+    <div className={`paper-bg grain relative flex h-full overflow-hidden ${side ? "flex-row" : "flex-col"}`}>
       {settings.ambient && <Ambient />}
 
+      {side && (
+        <div
+          inert={focus || undefined}
+          className={`relative z-40 shrink-0 self-stretch transition-all duration-300 ${focus ? "pointer-events-none -translate-x-full max-w-0 overflow-hidden opacity-0" : "w-[230px]"}`}
+        >
+          {tabStrip}
+        </div>
+      )}
+
+      {/* column: chrome + content; the side rail is a flex-row sibling of this wrapper */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* ---------- chrome ---------- */}
       <div
         inert={focus || undefined}
         className={`relative z-40 shrink-0 transition-all duration-300 ${focus ? "pointer-events-none -translate-y-full max-h-0 overflow-hidden opacity-0" : "max-h-[420px]"}`}
       >
-        <TabStrip
-          tabs={tabs}
-          activeId={tab?.id || ""}
-          onSelect={setActiveId}
-          onClose={closeTab}
-          onNew={() => openNew()}
-          onPin={(id) => patch(id, (t) => ({ ...t, pinned: !t.pinned }))}
-          onMute={(id) => patch(id, (t) => ({ ...t, muted: !t.muted }))}
-          onMenuAction={onTabMenu}
-          popupHosts={popupHosts}
-          onReorder={(from, to) =>
-            setTabs((ts) => {
-              const next = [...ts];
-              const [m] = next.splice(from, 1);
-              next.splice(to, 0, m);
-              return next;
-            })
-          }
-          onTheme={() => setSettings((s) => ({ ...s, theme: s.theme === "night" ? "day" : "night" }))}
-          theme={settings.theme}
-          onFocusMode={() => setFocus(true)}
-        />
+        {!side && tabStrip}
 
         {tab && (
           <Toolbar
@@ -2170,6 +2187,7 @@ export default function App() {
           onOpenShields={() => setDrawer("privacy")}
           onToggleShields={() => setSettings((s) => ({ ...s, shields: !s.shields }))}
         />
+      </div>
       </div>
 
       {focus && (

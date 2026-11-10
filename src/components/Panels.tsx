@@ -427,6 +427,22 @@ export function SettingsPanel({
 
       <section>
         <h3 className="mb-2 text-[22px]" style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>look &amp; feel</h3>
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <span className="mr-auto text-[16.5px]">tab layout</span>
+          {(["top", "side"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setSettings((s) => ({ ...s, tabsLayout: v }))}
+              className={[
+                "hd-soft flex items-center gap-1.5 px-2.5 py-1 text-[15px] transition",
+                settings.tabsLayout === v ? "bg-yellow/60 ink-shadow-sm" : "bg-paper3/40 hover:bg-paper3",
+              ].join(" ")}
+            >
+              <Icon name={v === "top" ? "layers" : "split"} size={15} />
+              {v === "top" ? "top strip" : "side rail"}
+            </button>
+          ))}
+        </div>
         <div className="grid gap-1.5">
           {[
             { k: "restoreSession" as const, label: "Restore last session", note: "reopen your tabs when you come back (ghost tabs never persist)", on: settings.restoreSession, fn: () => setSettings((s) => ({ ...s, restoreSession: !s.restoreSession })) },

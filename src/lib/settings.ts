@@ -2,6 +2,8 @@ export type ReinkStyle = "notebook" | "serif" | "mono";
 export type PaperTone = "default" | "sepia";
 /** "original" = the real site (shielded). "reader" = re-inked. "live" = direct iframe. */
 export type DefaultPageView = "original" | "reader" | "live";
+/** "top" = classic horizontal tab strip. "side" = Arc-style vertical rail. */
+export type TabsLayout = "top" | "side";
 
 export interface Settings {
   engine: string;
@@ -29,6 +31,7 @@ export interface Settings {
   showImages: boolean;
   restoreSession: boolean;
   darkOriginal: boolean;
+  tabsLayout: TabsLayout;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showImages: true,
   restoreSession: true,
   darkOriginal: false,
+  tabsLayout: "side",
 };
 
 export type ToggleDef = {
